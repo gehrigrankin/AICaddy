@@ -29,20 +29,23 @@
 		30C7A5612F86019E004E8722 /* AICaddyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AICaddyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		30C7A6942F8625E0004E8722 /* Exceptions for "AICaddy" folder in "AICaddy" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 30C7A5462F86019B004E8722 /* AICaddy */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		30C7A5492F86019B004E8722 /* AICaddy */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				30C7A6942F8625E0004E8722 /* Exceptions for "AICaddy" folder in "AICaddy" target */,
+			);
 			path = AICaddy;
-			sourceTree = "<group>";
-		};
-		30C7A55A2F86019E004E8722 /* AICaddyTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = AICaddyTests;
-			sourceTree = "<group>";
-		};
-		30C7A5642F86019E004E8722 /* AICaddyUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = AICaddyUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -76,8 +79,6 @@
 			isa = PBXGroup;
 			children = (
 				30C7A5492F86019B004E8722 /* AICaddy */,
-				30C7A55A2F86019E004E8722 /* AICaddyTests */,
-				30C7A5642F86019E004E8722 /* AICaddyUITests */,
 				30C7A5482F86019B004E8722 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -130,9 +131,6 @@
 			dependencies = (
 				30C7A5592F86019E004E8722 /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				30C7A55A2F86019E004E8722 /* AICaddyTests */,
-			);
 			name = AICaddyTests;
 			packageProductDependencies = (
 			);
@@ -152,9 +150,6 @@
 			);
 			dependencies = (
 				30C7A5632F86019E004E8722 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				30C7A5642F86019E004E8722 /* AICaddyUITests */,
 			);
 			name = AICaddyUITests;
 			packageProductDependencies = (
@@ -388,11 +383,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = AICaddy/AICaddy.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XMUZ64558Q;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				"INFOPLIST_FILE[sdk=*]" = AICaddy/Info.plist;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -425,11 +422,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = AICaddy/AICaddy.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XMUZ64558Q;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				"INFOPLIST_FILE[sdk=*]" = AICaddy/Info.plist;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

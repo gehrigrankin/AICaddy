@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+<gpx version="1.1" creator="AICaddy Debug"
+     xmlns="http://www.topografix.com/GPX/1/1">
+
+  <!-- Torrey Pines South Course, La Jolla, CA -->
+  <!-- Simulates walking from Hole 1 tee through the first few holes -->
+  <!-- Each waypoint is 10 seconds apart — total ~3 minutes of movement -->
+
+  <!-- Hole 1 Tee (Par 4, 453 yds) -->
+  <wpt lat="32.9005" lon="-117.2467">
+    <name>Hole 1 Tee</name>
+    <time>2025-01-01T00:00:00Z</time>
+  </wpt>
+
+  <!-- Walking down Hole 1 fairway -->
+  <wpt lat="32.9010" lon="-117.2462">
+    <name>Hole 1 - 200 out</name>
+    <time>2025-01-01T00:00:10Z</time>
+  </wpt>
+
+  <wpt lat="32.9015" lon="-117.2457">
+    <name>Hole 1 - 150 out</name>
+    <time>2025-01-01T00:00:20Z</time>
+  </wpt>
+
+  <wpt lat="32.9020" lon="-117.2452">
+    <name>Hole 1 - approach</name>
+    <time>2025-01-01T00:00:30Z</time>
+  </wpt>
+
+  <wpt lat="32.9025" lon="-117.2448">
+    <name>Hole 1 Green</name>
+    <time>2025-01-01T00:00:40Z</time>
+  </wpt>
+
+  <!-- Hole 2 Tee (Par 4, 389 yds) -->
+  <wpt lat="32.9028" lon="-117.2445">
+    <name>Hole 2 Tee</name>
+    <time>2025-01-01T00:00:50Z</time>
+  </wpt>
+
+  <wpt lat="32.9033" lon="-117.2440">
+    <name>Hole 2 - 200 out</name>
+    <time>2025-01-01T00:01:00Z</time>
+  </wpt>
+
+  <wpt lat="32.9038" lon="-117.2435">
+    <name>Hole 2 - 100 out</name>
+    <time>2025-01-01T00:01:10Z</time>
+  </wpt>
+
+  <wpt lat="32.9042" lon="-117.2430">
+    <name>Hole 2 Green</name>
+    <time>2025-01-01T00:01:20Z</time>
+  </wpt>
+
+  <!-- Hole 3 Tee (Par 3, 201 yds) -->
+  <wpt lat="32.9044" lon="-117.2428">
+    <name>Hole 3 Tee</name>
+    <time>2025-01-01T00:01:30Z</time>
+  </wpt>
+
+  <wpt lat="32.9047" lon="-117.2424">
+    <name>Hole 3 - 100 out</name>
+    <time>2025-01-01T00:01:40Z</time>
+  </wpt>
+
+  <wpt lat="32.9050" lon="-117.2420">
+    <name>Hole 3 Green</name>
+    <time>2025-01-01T00:01:50Z</time>
+  </wpt>
+
+</gpx>

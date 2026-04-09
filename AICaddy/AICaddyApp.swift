@@ -1,32 +1,30 @@
-//
-//  AICaddyApp.swift
-//  AICaddy
-//
-//  Created by Gehrig Rankin on 4/7/26.
-//
-
 import SwiftUI
 import SwiftData
 
 @main
 struct AICaddyApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+    @State private var locationService = LocationService()
+    @State private var speechService = SpeechService()
+    @State private var clubRecommender = ClubRecommendationService()
+    @State private var weatherService = WeatherService()
+    @State private var elevationService = ElevationService()
 
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
+    private let shotParser = ShotParserService()
+    private let courseSearch = CourseSearchService()
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            HomeView(
+                locationService: locationService,
+                speechService: speechService,
+                shotParser: shotParser,
+                courseSearch: courseSearch,
+                clubRecommender: clubRecommender,
+                weatherService: weatherService,
+                elevationService: elevationService
+            )
+            .preferredColorScheme(.dark)
         }
-        .modelContainer(sharedModelContainer)
+        .modelContainer(for: [Course.self, Round.self, GolfBag.self, EquipmentLog.self])
     }
 }

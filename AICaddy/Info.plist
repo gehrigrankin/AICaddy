@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>AI Caddy uses your location to show distances to the green, hazards, and your drag target on the hole map.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>AI Caddy uses the microphone for voice shot tracking. Say "driver 250 fairway" to log shots hands-free.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>AI Caddy uses speech recognition to convert your voice into shot data so you can track stats without typing.</string>
+    <key>ANTHROPIC_API_KEY</key>
+    <string>$(ANTHROPIC_API_KEY)</string>
+</dict>
+</plist>
