@@ -210,6 +210,7 @@ final class CourseSearchService {
             var handicap: Int?
             var tee: GpsPoint?
             var green: GpsPoint?
+            var fairwayPath: [GpsPoint] = []  // intermediate nodes of the hole way
             var bunkers: [GpsPoint] = []
             var water: [GpsPoint] = []
             var fairway: GpsPoint?
@@ -234,10 +235,15 @@ final class CourseSearchService {
                     if holeMap[num] == nil { holeMap[num] = HoleFeatures() }
                     if let par = tags["par"].flatMap({ Int($0) }) { holeMap[num]?.par = par }
                     if let hcp = tags["handicap"].flatMap({ Int($0) }) { holeMap[num]?.handicap = hcp }
-                    // Hole way — first node is tee area, last node is green area
+                    // Hole way — first node is tee, last is green, middle nodes trace fairway centerline
                     if let nodes = el["nodes"] as? [Int], nodes.count >= 2 {
                         if let teeCoord = nodeCoords[nodes.first!] { holeMap[num]?.tee = teeCoord }
                         if let greenCoord = nodeCoords[nodes.last!] { holeMap[num]?.green = greenCoord }
+                        // Capture intermediate nodes as fairway path
+                        if nodes.count > 2 {
+                            let middleNodes = nodes.dropFirst().dropLast()
+                            holeMap[num]?.fairwayPath = middleNodes.compactMap { nodeCoords[$0] }
+                        }
                     }
                 }
 
@@ -301,6 +307,7 @@ final class CourseSearchService {
                 greenFront: nil,
                 greenBack: nil,
                 fairwayCenter: f.fairway,
+                fairwayPath: f.fairwayPath.isEmpty ? nil : f.fairwayPath,
                 hazards: hazards.isEmpty ? nil : hazards
             )
 

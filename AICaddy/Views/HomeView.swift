@@ -3,12 +3,14 @@ import SwiftData
 import CoreLocation
 
 struct HomeView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \Round.date, order: .reverse) private var allRounds: [Round]
     @Query(sort: \Course.createdAt, order: .reverse) private var savedCourses: [Course]
     @Query private var bags: [GolfBag]
     @State private var showNewRound = false
     @State private var roundToResume: Round?
     @State private var geofenceDismissed = false
+    @State private var showStopConfirm = false
 
     let locationService: LocationService
     let speechService: SpeechService
@@ -37,52 +39,83 @@ struct HomeView: View {
         HandicapCalculator.calculateIndex(rounds: handicapRounds)
     }
 
+    private var avgScore: Int? {
+        let completed = allRounds.filter { $0.isComplete }
+        guard !completed.isEmpty else { return nil }
+        let total = completed.reduce(0) { $0 + $1.holes.reduce(0) { $0 + $1.strokes } }
+        return total / completed.count
+    }
+
+    private var bestScore: Int? {
+        allRounds.filter(\.isComplete)
+            .map { $0.holes.reduce(0) { $0 + $1.strokes } }
+            .filter { $0 > 0 }
+            .min()
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    // Hero
-                    VStack(spacing: 8) {
-                        Text("⛳")
-                            .font(.system(size: 48))
-                        Text("AI Caddy")
-                            .font(.largeTitle.bold())
-                        Text("Track your round with voice.\nGet the stats you never had time to log.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
+                VStack(spacing: 16) {
+                    // Header
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("AI Caddy")
+                                .font(.system(size: 28, weight: .heavy))
+                            Text("Your intelligent golf companion")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        NavigationLink {
+                            BagView()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "bag.fill")
+                                    .font(.system(size: 13))
+                                Text("My Bag")
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                            .foregroundStyle(.white.opacity(0.7))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color(.systemGray5))
+                            .clipShape(Capsule())
+                        }
                     }
-                    .padding(.top, 20)
+                    .padding(.top, 8)
 
-                    // Nearby course geofence banner
-                    if let courseName = locationService.nearbyCourseName,
-                       !geofenceDismissed {
+                    // Geofence banner
+                    if let courseName = locationService.nearbyCourseName, !geofenceDismissed {
                         Button {
                             showNewRound = true
                             geofenceDismissed = true
                             locationService.dismissNearbyCourse()
                         } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("NEARBY COURSE DETECTED")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(.blue)
-                                    Text("Looks like you're at \(courseName). Tap to start a round.")
-                                        .font(.subheadline)
+                            HStack(spacing: 12) {
+                                Image(systemName: "location.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.green)
+                                    .frame(width: 32, height: 32)
+                                    .background(.green.opacity(0.15))
+                                    .clipShape(Circle())
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(courseName)
+                                        .font(.system(size: 14, weight: .semibold))
                                         .foregroundStyle(.primary)
+                                    Text("Tap to start your round")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Image(systemName: "arrow.right.circle.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(.blue)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(.tertiary)
                             }
-                            .padding()
-                            .background(Color.blue.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                            )
+                            .padding(12)
+                            .background(.green.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(.green.opacity(0.2), lineWidth: 1))
                         }
                         .overlay(alignment: .topTrailing) {
                             Button {
@@ -90,137 +123,169 @@ struct HomeView: View {
                                 locationService.dismissNearbyCourse()
                             } label: {
                                 Image(systemName: "xmark")
-                                    .font(.system(size: 10, weight: .bold))
+                                    .font(.system(size: 8, weight: .bold))
                                     .foregroundStyle(.secondary)
-                                    .padding(8)
-                                    .contentShape(Rectangle())
+                                    .padding(6)
                             }
                         }
                     }
 
-                    // Handicap Index
-                    if let handicap = calculatedHandicap {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("HANDICAP INDEX")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundStyle(.secondary)
-                                Text(String(format: "%.1f", handicap))
-                                    .font(.system(size: 28, weight: .bold))
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text("\(handicapRounds.count) rounds")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("WHS")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                        .padding()
-                        .background(Color(.systemGray6).opacity(0.6))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                    } else if !handicapRounds.isEmpty {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("HANDICAP INDEX")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundStyle(.secondary)
-                                Text("--")
-                                    .font(.system(size: 28, weight: .bold))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text("\(handicapRounds.count)/3 rounds to calculate")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                        .background(Color(.systemGray6).opacity(0.6))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                    }
-
-                    // Resume in-progress
+                    // Resume round (prominent)
                     if let inProgress = inProgressRound {
                         Button { roundToResume = inProgress } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("ROUND IN PROGRESS")
-                                        .font(.system(size: 10, weight: .bold))
+                            HStack(spacing: 14) {
+                                let score = inProgress.holes.reduce(0) { $0 + $1.strokes }
+                                ZStack {
+                                    Circle()
+                                        .stroke(.orange.opacity(0.3), lineWidth: 3)
+                                        .frame(width: 52, height: 52)
+                                    Text("\(score)")
+                                        .font(.system(size: 22, weight: .heavy))
                                         .foregroundStyle(.orange)
+                                }
+
+                                VStack(alignment: .leading, spacing: 3) {
                                     Text(inProgress.courseName)
-                                        .font(.headline)
+                                        .font(.system(size: 15, weight: .semibold))
                                         .foregroundStyle(.primary)
-                                    Text("Hole \(inProgress.currentHole) · \(inProgress.teeName)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    HStack(spacing: 6) {
+                                        Text("Hole \(inProgress.currentHole)")
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundStyle(.orange)
+                                        Text("·")
+                                            .foregroundStyle(.tertiary)
+                                        Text(inProgress.teeName)
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
+
                                 Spacer()
-                                VStack(alignment: .trailing) {
-                                    Text("\(inProgress.holes.reduce(0) { $0 + $1.strokes })")
-                                        .font(.title.bold())
-                                    Text(inProgress.date.formatted(date: .abbreviated, time: .omitted))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
+
+                                Text("Resume")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.orange)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(.orange.opacity(0.15))
+                                    .clipShape(Capsule())
                             }
-                            .padding()
-                            .background(Color.orange.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                            )
+                            .padding(14)
+                            .background(Color(.systemGray6).opacity(0.8))
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                        }
+                        .overlay(alignment: .topTrailing) {
+                            Button { showStopConfirm = true } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 8, weight: .heavy))
+                                    .foregroundStyle(.white.opacity(0.6))
+                                    .frame(width: 22, height: 22)
+                                    .background(Color(.systemGray3))
+                                    .clipShape(Circle())
+                                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+                            }
+                            .offset(x: 8, y: -8)
+                        }
+                        .confirmationDialog(
+                            "End this round?",
+                            isPresented: $showStopConfirm,
+                            titleVisibility: .visible
+                        ) {
+                            Button("End & Save", role: .destructive) {
+                                inProgress.isComplete = true
+                            }
+                            Button("Delete Round", role: .destructive) {
+                                modelContext.delete(inProgress)
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("You're on hole \(inProgress.currentHole) at \(inProgress.courseName).")
                         }
                     }
 
-                    // Start new round
+                    // Start round CTA
                     Button { showNewRound = true } label: {
-                        Text("Start New Round")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 18)
-                            .background(Color.green)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                        HStack(spacing: 10) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 16, weight: .bold))
+                            Text("Start New Round")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            LinearGradient(
+                                colors: [Color(red: 0.2, green: 0.7, blue: 0.3), Color(red: 0.15, green: 0.55, blue: 0.25)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .shadow(color: .green.opacity(0.3), radius: 8, y: 4)
                     }
 
-                    // Quick links
-                    HStack(spacing: 12) {
+                    // Stats at a glance
+                    HStack(spacing: 10) {
+                        HomeStatCard(
+                            label: "HANDICAP",
+                            value: calculatedHandicap.map { String(format: "%.1f", $0) } ?? "--",
+                            sub: handicapRounds.isEmpty ? nil : (calculatedHandicap != nil ? "WHS" : "\(handicapRounds.count)/3"),
+                            color: .green
+                        )
+                        HomeStatCard(
+                            label: "AVG SCORE",
+                            value: avgScore.map { "\($0)" } ?? "--",
+                            sub: allRounds.filter(\.isComplete).isEmpty ? nil : "\(allRounds.filter(\.isComplete).count) rounds",
+                            color: .cyan
+                        )
+                        HomeStatCard(
+                            label: "BEST",
+                            value: bestScore.map { "\($0)" } ?? "--",
+                            sub: nil,
+                            color: .yellow
+                        )
+                    }
+
+                    // Quick links row
+                    HStack(spacing: 10) {
                         NavigationLink {
                             HistoryView()
                         } label: {
-                            QuickLink(icon: "chart.bar.fill", title: "History",
-                                      sub: "\(recentCompleted.count) rounds")
+                            QuickLink(icon: "clock.arrow.circlepath", title: "History",
+                                      sub: "\(allRounds.filter(\.isComplete).count)")
                         }
                         NavigationLink {
                             StatsDashboardView()
                         } label: {
-                            QuickLink(icon: "chart.line.uptrend.xyaxis", title: "Stats",
-                                      sub: "Dashboard")
-                        }
-                        NavigationLink {
-                            BagView()
-                        } label: {
-                            QuickLink(icon: "bag.fill", title: "My Bag",
-                                      sub: "\(bags.first?.clubs.count ?? 0) clubs")
+                            QuickLink(icon: "chart.xyaxis.line", title: "Stats",
+                                      sub: "Analysis")
                         }
                     }
 
                     // Recent rounds
                     if !recentCompleted.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Recent Rounds")
-                                .font(.subheadline.bold())
-                                .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text("Recent Rounds")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                NavigationLink {
+                                    HistoryView()
+                                } label: {
+                                    Text("See All")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(.green)
+                                }
+                            }
 
-                            ForEach(recentCompleted) { round in
+                            ForEach(recentCompleted.prefix(3)) { round in
                                 NavigationLink {
                                     RoundSummaryView(round: round, onDone: {})
                                 } label: {
                                     RoundRow(round: round)
-                                        .padding(12)
+                                        .padding(10)
                                         .background(Color(.systemGray6).opacity(0.5))
                                         .clipShape(RoundedRectangle(cornerRadius: 10))
                                 }
@@ -230,22 +295,28 @@ struct HomeView: View {
                                 NavigationLink {
                                     YearlyWrappedView(rounds: allRounds.filter(\.isComplete))
                                 } label: {
-                                    Text("View Season Recap")
-                                        .font(.subheadline.bold())
-                                        .foregroundStyle(.green)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 12)
-                                        .background(Color.green.opacity(0.1))
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "sparkles")
+                                            .font(.system(size: 13))
+                                        Text("Season Recap")
+                                            .font(.system(size: 13, weight: .semibold))
+                                    }
+                                    .foregroundStyle(.green)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(.green.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
                                 }
                             }
                         }
                     }
 
-                    // On the Horizon
+                    // Coming soon (minimal)
                     ComingSoonSection()
+                        .padding(.top, 8)
                 }
-                .padding()
+                .padding(.horizontal, 16)
+                .padding(.bottom, 90)
             }
             .onAppear {
                 setupCourseGeofences()
@@ -296,20 +367,64 @@ struct HomeView: View {
     }
 }
 
+// MARK: - Stat Card
+
+private struct HomeStatCard: View {
+    let label: String
+    let value: String
+    let sub: String?
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 8, weight: .heavy))
+                .foregroundStyle(color.opacity(0.6))
+                .tracking(0.5)
+            Text(value)
+                .font(.system(size: 24, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+            if let sub {
+                Text(sub)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(Color(.systemGray6).opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
 struct QuickLink: View {
     let icon: String
     let title: String
     let sub: String
 
     var body: some View {
-        VStack(spacing: 6) {
+        HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.title2)
-            Text(title).font(.subheadline.bold())
-            Text(sub).font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.green)
+                .frame(width: 34, height: 34)
+                .background(.green.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Text(sub)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.systemGray6).opacity(0.6))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
@@ -317,63 +432,27 @@ struct QuickLink: View {
 
 // MARK: - Coming Soon
 
-private struct ComingSoonFeature: Identifiable {
-    let id = UUID()
-    let icon: String
-    let name: String
-}
-
-private let comingSoonFeatures: [ComingSoonFeature] = [
-    .init(icon: "list.number", name: "Live Leaderboard"),
-    .init(icon: "dollarsign.circle", name: "Skins & Nassau"),
-    .init(icon: "person.3.fill", name: "Group Rounds"),
-    .init(icon: "figure.golf", name: "Practice Tracker"),
-    .init(icon: "target", name: "Goal Setting"),
-    .init(icon: "book.closed.fill", name: "Drill Library"),
-    .init(icon: "calendar.badge.clock", name: "Season Stats"),
-]
-
 struct ComingSoonSection: View {
-    private let columns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12),
-    ]
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("On the Horizon")
-                .font(.subheadline.bold())
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("COMING SOON")
+                .font(.system(size: 10, weight: .heavy))
+                .foregroundStyle(.tertiary)
+                .tracking(1)
 
-            LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(comingSoonFeatures) { feature in
-                    ComingSoonTile(icon: feature.icon, name: feature.name)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(["Live Leaderboard", "Skins & Nassau", "Group Rounds", "Practice Tracker"], id: \.self) { name in
+                        Text(name)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color(.systemGray3))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color(.systemGray6).opacity(0.3))
+                            .clipShape(Capsule())
+                    }
                 }
             }
         }
-    }
-}
-
-private struct ComingSoonTile: View {
-    let icon: String
-    let name: String
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(Color(.systemGray3))
-            Text(name)
-                .font(.caption.bold())
-                .foregroundStyle(Color(.systemGray2))
-            Text("Coming Soon")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(Color(.systemGray3))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(Color(.systemGray6).opacity(0.4))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .opacity(0.7)
     }
 }

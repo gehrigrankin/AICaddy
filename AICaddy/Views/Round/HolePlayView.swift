@@ -68,21 +68,26 @@ struct HolePlayView: View {
     private var runningToPar: Int { totalScore - totalPar }
     private var holesPlayed: Int { hole.holeNumber - 1 }
 
+    /// Measure distance from tee box before first shot, from user position after
+    private var distanceMeasurePoint: CLLocationCoordinate2D? {
+        if hole.shots.isEmpty, let tee = holeGps?.tee {
+            return tee.coordinate
+        }
+        return userLocation
+    }
+
     var body: some View {
         ZStack {
-            // MARK: Full-screen map background
-            if let gps = holeGps {
-                HoleMapView(
-                    holeGps: gps,
-                    holeNumber: hole.holeNumber,
-                    par: hole.par,
-                    userLocation: userLocation,
-                    caddyTarget: caddyTarget
-                )
-                .ignoresSafeArea()
-            } else {
-                Color.black.ignoresSafeArea()
-            }
+            // MARK: Full-screen map background (always show, even without hole GPS)
+            HoleMapView(
+                holeGps: holeGps,
+                holeNumber: hole.holeNumber,
+                par: hole.par,
+                userLocation: userLocation,
+                distanceMeasurePoint: distanceMeasurePoint,
+                caddyTarget: holeGps != nil ? caddyTarget : nil
+            )
+            .ignoresSafeArea()
 
             // MARK: Overlay UI
             VStack(spacing: 0) {
@@ -203,8 +208,8 @@ struct HolePlayView: View {
                 .padding(.trailing, 4)
             }
 
-            // Right: distances
-            if let loc = userLocation, let gps = holeGps {
+            // Right: distances (from tee before first shot, from user after)
+            if let gps = holeGps, let loc = distanceMeasurePoint {
                 distanceRow(userLocation: loc, gps: gps)
             }
         }

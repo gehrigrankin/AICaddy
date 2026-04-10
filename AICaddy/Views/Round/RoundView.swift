@@ -351,10 +351,6 @@ struct RoundView: View {
         if let momentum = SmartAlertService.checkMomentum(holes: round.holes, currentHole: currentHole) {
             return momentum
         }
-        // Then pace
-        if let pace = SmartAlertService.checkPace(roundStartTime: round.date, currentHole: currentHole) {
-            return pace
-        }
         // Then fatigue
         if let fatigue = SmartAlertService.checkFatigue(holes: round.holes) {
             return fatigue
@@ -448,17 +444,18 @@ struct RoundView: View {
 
     /// AI caddy suggested target: where to aim the tee shot on par 4/5s
     private var currentSuggestedTarget: CLLocationCoordinate2D? {
-        guard let loc = locationService.location,
-              let gps = currentHoleGps,
+        guard let gps = currentHoleGps,
+              let tee = gps.tee,
               let holeScore = round?.holes.first(where: { $0.holeNumber == currentHole })
         else { return nil }
 
         // Only suggest before first shot (tee shot planning)
         guard holeScore.shots.isEmpty else { return nil }
 
+        // Always calculate from the tee box, not user's GPS position
         let bags = (try? modelContext.fetch(FetchDescriptor<GolfBag>()))?.first?.clubs ?? []
         let result = courseStrategy.suggestedTarget(
-            userLocation: loc,
+            userLocation: tee.coordinate,
             holeGps: gps,
             par: holeScore.par,
             clubAverages: clubRecommender.clubAverages,

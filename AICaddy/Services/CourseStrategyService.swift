@@ -59,13 +59,27 @@ final class CourseStrategyService {
         // Par 3s should always be reachable — don't suggest layups
         if par <= 3 { return nil }
 
-        // Find ideal layup distance: leave a comfortable approach shot
-        // Prefer leaving 100-150y to the green (wedge/short iron range)
-        let idealApproach = findIdealApproachDistance(clubAverages: clubAverages, bagClubs: bagClubs)
-        var targetDistFromUser = distToGreen - idealApproach
+        // Target distance = longest club the player can hit
+        // On long par 5s, just hit driver — don't try to leave a specific approach distance
+        var targetDistFromUser = longest.avg
+        var selectedClub = longest
 
-        // Find the club that matches this target distance
-        var selectedClub = findBestClub(for: targetDistFromUser, clubAverages: clubAverages, bagClubs: bagClubs)
+        // On par 4s or shorter par 5s where driver would leave a short approach,
+        // consider laying up to a comfortable wedge distance instead
+        let idealApproach = findIdealApproachDistance(clubAverages: clubAverages, bagClubs: bagClubs)
+        let driverLeavesYards = distToGreen - longest.avg
+        if driverLeavesYards > 30 && driverLeavesYards < idealApproach + 30 {
+            // Driver leaves a reasonable approach — just hit driver
+            targetDistFromUser = longest.avg
+            selectedClub = longest
+        } else if distToGreen - idealApproach <= longest.avg {
+            // Can reach ideal approach distance with a club — use it
+            let idealTarget = distToGreen - idealApproach
+            let bestClub = findBestClub(for: idealTarget, clubAverages: clubAverages, bagClubs: bagClubs)
+            targetDistFromUser = bestClub.avg
+            selectedClub = bestClub
+        }
+        // else: hole is very long, just hit the longest club
 
         // Check for hazards near the landing zone
         if let tee = holeGps.tee, let hazards = holeGps.hazards, !hazards.isEmpty {
@@ -84,12 +98,11 @@ final class CourseStrategyService {
             selectedClub = adjusted.club
         }
 
-        // Calculate the coordinate along the user-to-green line at targetDistFromUser
-        let targetCoord = interpolateCoordinate(
+        // Place target along the fairway centerline, not the straight tee-to-green line
+        let targetCoord = interpolateAlongFairway(
             from: userLocation,
-            to: greenCenter.coordinate,
-            distanceYards: targetDistFromUser,
-            totalDistanceYards: distToGreen
+            holeGps: holeGps,
+            targetDistance: targetDistFromUser
         )
 
         let reason: String
@@ -198,6 +211,48 @@ final class CourseStrategyService {
             }
         }
         return nil
+    }
+
+    /// Walk along the hole's fairway path (tee → waypoints → green) and find
+    /// the coordinate at the given distance from the start point.
+    private func interpolateAlongFairway(
+        from start: CLLocationCoordinate2D,
+        holeGps: HoleGps,
+        targetDistance: Int
+    ) -> CLLocationCoordinate2D {
+        // Build a path: start → fairway waypoints → green
+        var path: [CLLocationCoordinate2D] = [start]
+
+        if let waypoints = holeGps.fairwayPath, !waypoints.isEmpty {
+            path.append(contentsOf: waypoints.map(\.coordinate))
+        } else if let fairway = holeGps.fairwayCenter {
+            path.append(fairway.coordinate)
+        }
+
+        if let green = holeGps.greenCenter {
+            path.append(green.coordinate)
+        }
+
+        guard path.count >= 2 else {
+            return start
+        }
+
+        // Walk along the path segments, accumulating distance
+        var remaining = targetDistance
+        for i in 0..<(path.count - 1) {
+            let segStart = path[i]
+            let segEnd = path[i + 1]
+            let segDist = LocationService.distanceYards(from: segStart, to: segEnd)
+
+            if remaining <= segDist {
+                // Target falls within this segment
+                return interpolateCoordinate(from: segStart, to: segEnd, distanceYards: remaining, totalDistanceYards: segDist)
+            }
+            remaining -= segDist
+        }
+
+        // Ran out of path — place at the last point
+        return path.last!
     }
 
     private func interpolateCoordinate(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, distanceYards: Int, totalDistanceYards: Int) -> CLLocationCoordinate2D {

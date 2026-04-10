@@ -10,12 +10,15 @@ struct HoleMapView: View {
     let holeNumber: Int
     let par: Int
     let userLocation: CLLocationCoordinate2D?
+    /// Point to measure distances from (tee before first shot, user GPS after)
+    var distanceMeasurePoint: CLLocationCoordinate2D? = nil
     var caddyTarget: CLLocationCoordinate2D? = nil
 
     @State private var dragTarget: CLLocationCoordinate2D?
     @State private var followUser = false
     @State private var showLayupRings = false
     @State private var mapStyle: MapStyle = .satellite
+    @State private var is3DView = false
 
     enum MapStyle: CaseIterable {
         case satellite, standard, hybrid
@@ -63,17 +66,26 @@ struct HoleMapView: View {
                 dragTarget: $dragTarget,
                 followUser: followUser,
                 showLayupRings: showLayupRings,
-                mapStyle: mapStyle.mkMapType,
-                caddyTarget: caddyTarget
+                mapStyle: is3DView ? .satelliteFlyover : mapStyle.mkMapType,
+                distanceMeasurePoint: distanceMeasurePoint,
+                caddyTarget: caddyTarget,
+                is3DView: is3DView
             )
             .ignoresSafeArea()
 
-            // Floating controls — right side, below safe area
+            // Floating controls — right side
             VStack {
-                Spacer().frame(height: 140) // clear nav bar + top overlay
-                VStack(spacing: 8) {
+                Spacer().frame(height: 160)
+                VStack(spacing: 6) {
                     MapButton(icon: mapStyle.icon) {
                         withAnimation(.easeInOut(duration: 0.2)) { mapStyle = mapStyle.next }
+                    }
+                    MapButton(icon: is3DView ? "view.3d" : "view.2d") {
+                        is3DView.toggle()
+                        // Re-frame the hole with the new perspective
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            NotificationCenter.default.post(name: .fitHole, object: nil)
+                        }
                     }
                     MapButton(icon: followUser ? "location.fill" : "location") {
                         followUser.toggle()
@@ -90,7 +102,7 @@ struct HoleMapView: View {
                 Spacer()
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
-            .padding(.trailing, 10)
+            .padding(.trailing, 8)
 
             // Clear target button — small X floating near top
             if dragTarget != nil {
@@ -134,12 +146,11 @@ private struct MapButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(.ultraThinMaterial)
-                .clipShape(Circle())
-                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                .frame(width: 32, height: 32)
+                .background(Color.black.opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
         }
     }
 }
@@ -181,7 +192,9 @@ struct NativeMapView: UIViewRepresentable {
     let followUser: Bool
     var showLayupRings: Bool = false
     var mapStyle: MKMapType = .satellite
+    var distanceMeasurePoint: CLLocationCoordinate2D? = nil
     var caddyTarget: CLLocationCoordinate2D? = nil
+    var is3DView: Bool = false
     var flyoverOnAppear: Bool = true
 
     func makeCoordinator() -> Coordinator {
@@ -234,6 +247,9 @@ struct NativeMapView: UIViewRepresentable {
             object: nil
         )
         context.coordinator.mapView = mapView
+        // Track initial hole so updateUIView doesn't double-trigger
+        context.coordinator.currentHoleTee = holeGps?.tee
+        context.coordinator.currentHoleGreen = holeGps?.greenCenter
 
         // Initial framing: flyover if enabled, otherwise standard fit
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -252,6 +268,25 @@ struct NativeMapView: UIViewRepresentable {
         if mapView.mapType != mapStyle {
             mapView.mapType = mapStyle
         }
+
+        // Detect hole change and reframe the camera
+        let newTee = holeGps?.tee
+        let newGreen = holeGps?.greenCenter
+        let coord = context.coordinator
+        if newTee != coord.currentHoleTee || newGreen != coord.currentHoleGreen {
+            coord.currentHoleTee = newTee
+            coord.currentHoleGreen = newGreen
+            coord.hasFlyoverPlayed = false
+            // Small delay so the view settles before animating
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                if self.flyoverOnAppear {
+                    coord.flyoverHole()
+                } else {
+                    coord.fitHole()
+                }
+            }
+        }
+
         context.coordinator.updateAnnotations(on: mapView)
         context.coordinator.updateOverlays(on: mapView)
 
@@ -273,6 +308,9 @@ struct NativeMapView: UIViewRepresentable {
         private var targetAnnotation: MKPointAnnotation?
         private var isDraggingTarget = false
         var hasFlyoverPlayed = false
+        /// Track current hole identity so we can reframe when the hole changes
+        var currentHoleTee: GpsPoint?
+        var currentHoleGreen: GpsPoint?
 
         init(parent: NativeMapView) {
             self.parent = parent
@@ -310,44 +348,87 @@ struct NativeMapView: UIViewRepresentable {
             }
         }
 
-        // MARK: Fit hole tee-to-green
+        // MARK: Fit hole — frame from current position to target
 
         @objc func fitHole() {
-            guard let mapView, let gps = parent.holeGps else { return }
+            guard let mapView else { return }
 
-            guard let tee = gps.tee, let green = gps.greenCenter else {
-                // Fallback: just fit whatever points we have
-                var coords: [CLLocationCoordinate2D] = []
-                if let t = gps.tee { coords.append(t.coordinate) }
-                if let g = gps.greenCenter { coords.append(g.coordinate) }
-                if let loc = parent.userLocation { coords.append(loc) }
-                guard coords.count >= 1 else { return }
-                let region = MKCoordinateRegion(center: coords[0], latitudinalMeters: 400, longitudinalMeters: 400)
-                mapView.setRegion(region, animated: true)
+            guard let gps = parent.holeGps, let tee = gps.tee, let green = gps.greenCenter else {
+                // No hole GPS data — center on user location with a wide view
+                if let loc = parent.userLocation {
+                    let region = MKCoordinateRegion(center: loc, latitudinalMeters: 300, longitudinalMeters: 300)
+                    mapView.setRegion(region, animated: true)
+                }
                 return
             }
 
-            // Calculate bearing from tee to green so green is at the top of the screen
+            // Bottom of screen: where the player is (user location or tee)
+            let bottomPoint = parent.distanceMeasurePoint ?? parent.userLocation ?? tee.coordinate
+
+            // Distance from player to green
+            let distToGreen = CLLocation(latitude: bottomPoint.latitude, longitude: bottomPoint.longitude)
+                .distance(from: CLLocation(latitude: green.lat, longitude: green.lng))
+
+            // Top of screen: pick the target we're hitting toward
+            // If within ~275y (250m) of green, frame to the green
+            // Otherwise use caddy target if available, or a point ~300y ahead along the hole line
+            let topPoint: CLLocationCoordinate2D
+            let inGreenRange = distToGreen < 250 // meters (~275 yards)
+
+            if inGreenRange {
+                topPoint = green.coordinate
+            } else if let caddy = parent.caddyTarget {
+                topPoint = caddy
+            } else {
+                // No caddy target and far from green — frame ~300y (275m) ahead along tee→green line
+                let holeDist = CLLocation(latitude: tee.lat, longitude: tee.lng)
+                    .distance(from: CLLocation(latitude: green.lat, longitude: green.lng))
+                let fraction = min(275.0 / max(holeDist, 1), 1.0)
+                let aheadLat = bottomPoint.latitude + (green.lat - tee.lat) / max(holeDist, 1) * 275
+                let aheadLng = bottomPoint.longitude + (green.lng - tee.lng) / max(holeDist, 1) * 275
+                topPoint = CLLocationCoordinate2D(latitude: aheadLat, longitude: aheadLng)
+            }
+
+            // Bearing: always tee→green so the hole orientation stays consistent
             let bearing = Self.bearing(from: tee.coordinate, to: green.coordinate)
 
-            // Center between tee and green, biased 55% toward green
-            // so the green + its annotation label aren't clipped by the top overlay/Dynamic Island
-            let centerLat = tee.lat + (green.lat - tee.lat) * 0.55
-            let centerLng = tee.lng + (green.lng - tee.lng) * 0.55
+            // Distance between the two frame points
+            let frameDist = CLLocation(latitude: bottomPoint.latitude, longitude: bottomPoint.longitude)
+                .distance(from: CLLocation(latitude: topPoint.latitude, longitude: topPoint.longitude))
+
+            // The bottom panel covers ~40% of screen, top overlay ~12%.
+            // Visible map is the middle ~48%. Its center is ~36% from top.
+            // Bias 40% toward the top point so tee clears the bottom panel
+            // and the target tucks just under the top overlay.
+            let centerLat = bottomPoint.latitude + (topPoint.latitude - bottomPoint.latitude) * 0.40
+            let centerLng = bottomPoint.longitude + (topPoint.longitude - bottomPoint.longitude) * 0.40
             let center = CLLocationCoordinate2D(latitude: centerLat, longitude: centerLng)
 
-            // Calculate distance to determine altitude
-            let distance = CLLocation(latitude: tee.lat, longitude: tee.lng)
-                .distance(from: CLLocation(latitude: green.lat, longitude: green.lng))
-            // Altitude ~2.5x the hole distance to leave room for overlays at top and bottom
-            let altitude = max(distance * 2.5, 350)
+            // Altitude ~4.5x frame distance so both endpoints have breathing room
+            let altitude = max(frameDist * 4.5, 500)
 
-            let camera = MKMapCamera(
-                lookingAtCenter: center,
-                fromDistance: altitude,
-                pitch: 0,
-                heading: bearing
-            )
+            let camera: MKMapCamera
+            if parent.is3DView {
+                let eyePoint = parent.userLocation ?? tee.coordinate
+                let lookAt = green.coordinate
+                let behindLat = eyePoint.latitude - (lookAt.latitude - eyePoint.latitude) * 0.15
+                let behindLng = eyePoint.longitude - (lookAt.longitude - eyePoint.longitude) * 0.15
+                let behindPoint = CLLocationCoordinate2D(latitude: behindLat, longitude: behindLng)
+
+                camera = MKMapCamera(
+                    lookingAtCenter: behindPoint,
+                    fromDistance: max(frameDist * 1.8, 300),
+                    pitch: 55,
+                    heading: bearing
+                )
+            } else {
+                camera = MKMapCamera(
+                    lookingAtCenter: center,
+                    fromDistance: altitude,
+                    pitch: 0,
+                    heading: bearing
+                )
+            }
             mapView.setCamera(camera, animated: true)
         }
 
@@ -393,24 +474,9 @@ struct NativeMapView: UIViewRepresentable {
                 }
             }
 
-            // Camera 3: Pull back to standard fitHole view (arrives at 3s)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-                // Build the same camera fitHole() uses
-                let centerLat = tee.lat + (green.lat - tee.lat) * 0.55
-                let centerLng = tee.lng + (green.lng - tee.lng) * 0.55
-                let center = CLLocationCoordinate2D(latitude: centerLat, longitude: centerLng)
-                let altitude = max(holeDistance * 2.5, 350)
-
-                let cam3 = MKMapCamera(
-                    lookingAtCenter: center,
-                    fromDistance: altitude,
-                    pitch: 0,
-                    heading: bearing
-                )
-
-                UIView.animate(withDuration: 1.5, delay: 0, options: .curveEaseOut) {
-                    mapView.setCamera(cam3, animated: false)
-                }
+            // Camera 3: Settle into the standard fitHole view (arrives at 3s)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
+                self?.fitHole()
             }
         }
 
@@ -445,16 +511,17 @@ struct NativeMapView: UIViewRepresentable {
                 mapView.addAnnotation(GolfAnnotation(coordinate: tee.coordinate, type: .tee))
             }
 
-            // Green with distance labels (front/center/back)
+            // Green with distance labels (from tee before first shot, from user after)
             if let green = gps.greenCenter {
+                let measureFrom = parent.distanceMeasurePoint ?? parent.userLocation
                 let ann = GolfAnnotation(coordinate: green.coordinate, type: .greenCenter)
-                ann.distance = parent.userLocation.map {
+                ann.distance = measureFrom.map {
                     LocationService.distanceYards(from: $0, to: green.coordinate)
                 }
-                ann.frontDistance = parent.userLocation.flatMap { loc in
+                ann.frontDistance = measureFrom.flatMap { loc in
                     gps.greenFront.map { LocationService.distanceYards(from: loc, to: $0.coordinate) }
                 }
-                ann.backDistance = parent.userLocation.flatMap { loc in
+                ann.backDistance = measureFrom.flatMap { loc in
                     gps.greenBack.map { LocationService.distanceYards(from: loc, to: $0.coordinate) }
                 }
                 mapView.addAnnotation(ann)
@@ -470,8 +537,9 @@ struct NativeMapView: UIViewRepresentable {
             for hazard in gps.hazards ?? [] {
                 let ann = GolfAnnotation(coordinate: hazard.position.coordinate,
                                         type: hazard.type == "water" ? .water : .bunker)
+                let measureFrom = parent.distanceMeasurePoint ?? parent.userLocation
                 ann.title = hazard.label
-                ann.distance = parent.userLocation.map {
+                ann.distance = measureFrom.map {
                     LocationService.distanceYards(from: $0, to: hazard.position.coordinate)
                 }
                 mapView.addAnnotation(ann)
@@ -479,8 +547,9 @@ struct NativeMapView: UIViewRepresentable {
 
             // AI Caddy suggested target (only when user hasn't placed their own)
             if parent.dragTarget == nil, let caddy = parent.caddyTarget {
+                let measureFrom = parent.distanceMeasurePoint ?? parent.userLocation
                 let ann = GolfAnnotation(coordinate: caddy, type: .caddyTarget)
-                ann.distance = parent.userLocation.map {
+                ann.distance = measureFrom.map {
                     LocationService.distanceYards(from: $0, to: caddy)
                 }
                 ann.secondaryDistance = gps.greenCenter.map {
@@ -491,8 +560,9 @@ struct NativeMapView: UIViewRepresentable {
 
             // Drag target
             if let target = parent.dragTarget {
+                let measureFrom = parent.distanceMeasurePoint ?? parent.userLocation
                 let ann = GolfAnnotation(coordinate: target, type: .target)
-                ann.distance = parent.userLocation.map {
+                ann.distance = measureFrom.map {
                     LocationService.distanceYards(from: $0, to: target)
                 }
                 ann.secondaryDistance = gps.greenCenter.map {
@@ -507,11 +577,12 @@ struct NativeMapView: UIViewRepresentable {
         func updateOverlays(on mapView: MKMapView) {
             mapView.removeOverlays(mapView.overlays)
 
-            guard let loc = parent.userLocation else { return }
+            // Use tee as origin before first shot, user GPS after
+            guard let origin = parent.distanceMeasurePoint ?? parent.userLocation else { return }
 
-            // Line: user → green (3-layer glow)
+            // Line: origin → green (3-layer glow)
             if let green = parent.holeGps?.greenCenter {
-                let coords = [loc, green.coordinate]
+                let coords = [origin, green.coordinate]
                 for layer in GolfPolyline.GlowLayer.allCases {
                     let line = GolfPolyline(coordinates: coords, count: coords.count)
                     line.lineType = .userToGreen
@@ -520,9 +591,9 @@ struct NativeMapView: UIViewRepresentable {
                 }
             }
 
-            // Line: user → caddy target (when no manual target placed)
+            // Line: origin → caddy target (when no manual target placed)
             if parent.dragTarget == nil, let caddy = parent.caddyTarget {
-                let coords = [loc, caddy]
+                let coords = [origin, caddy]
                 for layer in GolfPolyline.GlowLayer.allCases {
                     let line = GolfPolyline(coordinates: coords, count: coords.count)
                     line.lineType = .userToTarget
@@ -539,9 +610,9 @@ struct NativeMapView: UIViewRepresentable {
                 }
             }
 
-            // Line: user → manual target (3-layer glow)
+            // Line: origin → manual target (3-layer glow)
             if let target = parent.dragTarget {
-                let coords = [loc, target]
+                let coords = [origin, target]
                 for layer in GolfPolyline.GlowLayer.allCases {
                     let line = GolfPolyline(coordinates: coords, count: coords.count)
                     line.lineType = .userToTarget

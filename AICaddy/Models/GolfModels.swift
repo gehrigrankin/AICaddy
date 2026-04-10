@@ -123,6 +123,7 @@ struct HoleGps: Codable {
     var greenFront: GpsPoint?
     var greenBack: GpsPoint?
     var fairwayCenter: GpsPoint?
+    var fairwayPath: [GpsPoint]?  // intermediate waypoints along the hole centerline (from OSM hole way nodes)
     var hazards: [HoleHazard]?
 }
 
