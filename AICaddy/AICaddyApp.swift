@@ -14,7 +14,7 @@ struct AICaddyApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainTabView(
+            HomeView(
                 locationService: locationService,
                 speechService: speechService,
                 shotParser: shotParser,

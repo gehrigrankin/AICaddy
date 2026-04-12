@@ -24,12 +24,12 @@ struct HomeView: View {
         allRounds.first { !$0.isComplete }
     }
 
-    private var recentCompleted: [Round] {
-        Array(allRounds.filter(\.isComplete).prefix(5))
+    private var completedRounds: [Round] {
+        allRounds.filter(\.isComplete)
     }
 
     private var handicapRounds: [HandicapRound] {
-        allRounds.filter(\.isComplete)
+        completedRounds
             .sorted { $0.date > $1.date }
             .prefix(20)
             .compactMap { HandicapRound.fromRound($0) }
@@ -40,14 +40,13 @@ struct HomeView: View {
     }
 
     private var avgScore: Int? {
-        let completed = allRounds.filter { $0.isComplete }
-        guard !completed.isEmpty else { return nil }
-        let total = completed.reduce(0) { $0 + $1.holes.reduce(0) { $0 + $1.strokes } }
-        return total / completed.count
+        guard !completedRounds.isEmpty else { return nil }
+        let total = completedRounds.reduce(0) { $0 + $1.holes.reduce(0) { $0 + $1.strokes } }
+        return total / completedRounds.count
     }
 
     private var bestScore: Int? {
-        allRounds.filter(\.isComplete)
+        completedRounds
             .map { $0.holes.reduce(0) { $0 + $1.strokes } }
             .filter { $0 > 0 }
             .min()
@@ -55,300 +54,290 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    // Header
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("AI Caddy")
-                                .font(.system(size: 28, weight: .heavy))
-                            Text("Your intelligent golf companion")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
+            ZStack {
+                backgroundGradient.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 18) {
+                        header
+                            .padding(.top, 12)
+
+                        if let courseName = locationService.nearbyCourseName, !geofenceDismissed {
+                            geofenceBanner(courseName: courseName)
                         }
-                        Spacer()
-                        NavigationLink {
-                            BagView()
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "bag.fill")
-                                    .font(.system(size: 13))
-                                Text("My Bag")
-                                    .font(.system(size: 12, weight: .semibold))
-                            }
-                            .foregroundStyle(.white.opacity(0.7))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color(.systemGray5))
-                            .clipShape(Capsule())
+
+                        if let inProgress = inProgressRound {
+                            resumeCard(inProgress: inProgress)
                         }
+
+                        teeOffButton
+
+                        careerStatsRow
+
+                        menuGrid
+
+                        Spacer(minLength: 40)
                     }
-                    .padding(.top, 8)
-
-                    // Geofence banner
-                    if let courseName = locationService.nearbyCourseName, !geofenceDismissed {
-                        Button {
-                            showNewRound = true
-                            geofenceDismissed = true
-                            locationService.dismissNearbyCourse()
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "location.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.green)
-                                    .frame(width: 32, height: 32)
-                                    .background(.green.opacity(0.15))
-                                    .clipShape(Circle())
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(courseName)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(.primary)
-                                    Text("Tap to start your round")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .padding(12)
-                            .background(.green.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(.green.opacity(0.2), lineWidth: 1))
-                        }
-                        .overlay(alignment: .topTrailing) {
-                            Button {
-                                geofenceDismissed = true
-                                locationService.dismissNearbyCourse()
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundStyle(.secondary)
-                                    .padding(6)
-                            }
-                        }
-                    }
-
-                    // Resume round (prominent)
-                    if let inProgress = inProgressRound {
-                        Button { roundToResume = inProgress } label: {
-                            HStack(spacing: 14) {
-                                let score = inProgress.holes.reduce(0) { $0 + $1.strokes }
-                                ZStack {
-                                    Circle()
-                                        .stroke(.orange.opacity(0.3), lineWidth: 3)
-                                        .frame(width: 52, height: 52)
-                                    Text("\(score)")
-                                        .font(.system(size: 22, weight: .heavy))
-                                        .foregroundStyle(.orange)
-                                }
-
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(inProgress.courseName)
-                                        .font(.system(size: 15, weight: .semibold))
-                                        .foregroundStyle(.primary)
-                                    HStack(spacing: 6) {
-                                        Text("Hole \(inProgress.currentHole)")
-                                            .font(.system(size: 12, weight: .medium))
-                                            .foregroundStyle(.orange)
-                                        Text("·")
-                                            .foregroundStyle(.tertiary)
-                                        Text(inProgress.teeName)
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-
-                                Spacer()
-
-                                Text("Resume")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(.orange)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                                    .background(.orange.opacity(0.15))
-                                    .clipShape(Capsule())
-                            }
-                            .padding(14)
-                            .background(Color(.systemGray6).opacity(0.8))
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                        }
-                        .overlay(alignment: .topTrailing) {
-                            Button { showStopConfirm = true } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 8, weight: .heavy))
-                                    .foregroundStyle(.white.opacity(0.6))
-                                    .frame(width: 22, height: 22)
-                                    .background(Color(.systemGray3))
-                                    .clipShape(Circle())
-                                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
-                            }
-                            .offset(x: 8, y: -8)
-                        }
-                        .confirmationDialog(
-                            "End this round?",
-                            isPresented: $showStopConfirm,
-                            titleVisibility: .visible
-                        ) {
-                            Button("End & Save", role: .destructive) {
-                                inProgress.isComplete = true
-                            }
-                            Button("Delete Round", role: .destructive) {
-                                modelContext.delete(inProgress)
-                            }
-                            Button("Cancel", role: .cancel) {}
-                        } message: {
-                            Text("You're on hole \(inProgress.currentHole) at \(inProgress.courseName).")
-                        }
-                    }
-
-                    // Start round CTA
-                    Button { showNewRound = true } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 16, weight: .bold))
-                            Text("Start New Round")
-                                .font(.system(size: 17, weight: .semibold))
-                        }
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            LinearGradient(
-                                colors: [Color(red: 0.2, green: 0.7, blue: 0.3), Color(red: 0.15, green: 0.55, blue: 0.25)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                        .shadow(color: .green.opacity(0.3), radius: 8, y: 4)
-                    }
-
-                    // Stats at a glance
-                    HStack(spacing: 10) {
-                        HomeStatCard(
-                            label: "HANDICAP",
-                            value: calculatedHandicap.map { String(format: "%.1f", $0) } ?? "--",
-                            sub: handicapRounds.isEmpty ? nil : (calculatedHandicap != nil ? "WHS" : "\(handicapRounds.count)/3"),
-                            color: .green
-                        )
-                        HomeStatCard(
-                            label: "AVG SCORE",
-                            value: avgScore.map { "\($0)" } ?? "--",
-                            sub: allRounds.filter(\.isComplete).isEmpty ? nil : "\(allRounds.filter(\.isComplete).count) rounds",
-                            color: .cyan
-                        )
-                        HomeStatCard(
-                            label: "BEST",
-                            value: bestScore.map { "\($0)" } ?? "--",
-                            sub: nil,
-                            color: .yellow
-                        )
-                    }
-
-                    // Quick links row
-                    HStack(spacing: 10) {
-                        NavigationLink {
-                            HistoryView()
-                        } label: {
-                            QuickLink(icon: "clock.arrow.circlepath", title: "History",
-                                      sub: "\(allRounds.filter(\.isComplete).count)")
-                        }
-                        NavigationLink {
-                            StatsDashboardView()
-                        } label: {
-                            QuickLink(icon: "chart.xyaxis.line", title: "Stats",
-                                      sub: "Analysis")
-                        }
-                    }
-
-                    // Recent rounds
-                    if !recentCompleted.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Text("Recent Rounds")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                NavigationLink {
-                                    HistoryView()
-                                } label: {
-                                    Text("See All")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(.green)
-                                }
-                            }
-
-                            ForEach(recentCompleted.prefix(3)) { round in
-                                NavigationLink {
-                                    RoundSummaryView(round: round, onDone: {})
-                                } label: {
-                                    RoundRow(round: round)
-                                        .padding(10)
-                                        .background(Color(.systemGray6).opacity(0.5))
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                                }
-                            }
-
-                            if allRounds.filter(\.isComplete).count >= 3 {
-                                NavigationLink {
-                                    YearlyWrappedView(rounds: allRounds.filter(\.isComplete))
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "sparkles")
-                                            .font(.system(size: 13))
-                                        Text("Season Recap")
-                                            .font(.system(size: 13, weight: .semibold))
-                                    }
-                                    .foregroundStyle(.green)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 10)
-                                    .background(.green.opacity(0.08))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                                }
-                            }
-                        }
-                    }
-
-                    // Coming soon (minimal)
-                    ComingSoonSection()
-                        .padding(.top, 8)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 40)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 90)
             }
-            .onAppear {
-                setupCourseGeofences()
-            }
+            .onAppear { setupCourseGeofences() }
             .onChange(of: locationService.nearbyCourseId) { _, newValue in
-                if newValue != nil {
-                    geofenceDismissed = false
+                if newValue != nil { geofenceDismissed = false }
+            }
+            .fullScreenCover(isPresented: $showNewRound) { roundCover(resume: nil) }
+            .fullScreenCover(item: $roundToResume) { roundCover(resume: $0) }
+        }
+    }
+
+    // MARK: - Background
+
+    private var backgroundGradient: some View {
+        LinearGradient(
+            colors: [Theme.Colors.backdrop, Theme.Colors.surfaceDeep, Theme.Colors.backdrop],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("AI CADDY")
+                    .font(Theme.Font.display(28))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .tracking(2)
+                Text("MAIN MENU")
+                    .font(Theme.Font.caption(10))
+                    .foregroundStyle(Theme.Colors.accent)
+                    .tracking(3)
+            }
+            Spacer()
+            Image(systemName: "figure.golf")
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .frame(width: 44, height: 44)
+                .background(
+                    Circle().fill(Theme.Colors.surfaceElevated)
+                )
+                .overlay(Circle().strokeBorder(Theme.Colors.border, lineWidth: 1))
+        }
+    }
+
+    // MARK: - Geofence banner
+
+    private func geofenceBanner(courseName: String) -> some View {
+        Button {
+            showNewRound = true
+            geofenceDismissed = true
+            locationService.dismissNearbyCourse()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "location.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.Colors.accent)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(Theme.Colors.accentSoft))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(courseName.uppercased())
+                        .font(Theme.Font.label(13))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .tracking(0.5)
+                    Text("Tap to tee off")
+                        .font(Theme.Font.caption())
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Theme.Colors.textMuted)
             }
-            .fullScreenCover(isPresented: $showNewRound) {
-                RoundView(
-                    locationService: locationService,
-                    speechService: speechService,
-                    shotParser: shotParser,
-                    courseSearch: courseSearch,
-                    clubRecommender: clubRecommender,
-                    weatherService: weatherService,
-                    elevationService: elevationService
-                )
+            .gameCard()
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Resume card
+
+    private func resumeCard(inProgress: Round) -> some View {
+        let score = inProgress.holes.reduce(0) { $0 + $1.strokes }
+        return Button { roundToResume = inProgress } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .stroke(Theme.Colors.accent.opacity(0.35), lineWidth: 3)
+                        .frame(width: 56, height: 56)
+                    Text("\(score)")
+                        .font(Theme.Font.display(22))
+                        .foregroundStyle(Theme.Colors.accent)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("ROUND IN PROGRESS")
+                        .font(Theme.Font.caption(9))
+                        .foregroundStyle(Theme.Colors.accent)
+                        .tracking(1.2)
+                    Text(inProgress.courseName)
+                        .font(Theme.Font.title(16))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text("HOLE \(inProgress.currentHole)")
+                            .font(Theme.Font.caption(10))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                        Text("·")
+                            .foregroundStyle(Theme.Colors.textMuted)
+                        Text(inProgress.teeName.uppercased())
+                            .font(Theme.Font.caption(10))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                }
+                Spacer()
+                Text("RESUME")
+                    .font(Theme.Font.label(11))
+                    .tracking(1)
+                    .foregroundStyle(Theme.Colors.backdrop)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(Capsule().fill(Theme.Colors.accent))
             }
-            .fullScreenCover(item: $roundToResume) { round in
-                RoundView(
-                    locationService: locationService,
-                    speechService: speechService,
-                    shotParser: shotParser,
-                    courseSearch: courseSearch,
-                    clubRecommender: clubRecommender,
-                    weatherService: weatherService,
-                    elevationService: elevationService,
-                    resumeRound: round
-                )
+            .gameCard()
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .topTrailing) {
+            Button { showStopConfirm = true } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .heavy))
+                    .foregroundStyle(Theme.Colors.textMuted)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(Theme.Colors.surfaceElevated))
+                    .overlay(Circle().strokeBorder(Theme.Colors.border, lineWidth: 1))
             }
+            .offset(x: 6, y: -6)
+        }
+        .confirmationDialog(
+            "End this round?",
+            isPresented: $showStopConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("End & Save", role: .destructive) { inProgress.isComplete = true }
+            Button("Delete Round", role: .destructive) { modelContext.delete(inProgress) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You're on hole \(inProgress.currentHole) at \(inProgress.courseName).")
+        }
+    }
+
+    // MARK: - Tee off CTA
+
+    private var teeOffButton: some View {
+        Button { showNewRound = true } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "flag.fill")
+                    .font(.system(size: 22, weight: .heavy))
+                    .foregroundStyle(Theme.Colors.backdrop)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("TEE OFF")
+                        .font(Theme.Font.display(26))
+                        .foregroundStyle(Theme.Colors.backdrop)
+                        .tracking(2)
+                    Text("START A NEW ROUND")
+                        .font(Theme.Font.caption(10))
+                        .foregroundStyle(Theme.Colors.backdrop.opacity(0.65))
+                        .tracking(1.5)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 18, weight: .heavy))
+                    .foregroundStyle(Theme.Colors.backdrop.opacity(0.7))
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 22)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Theme.Colors.accent, Color(red: 0.98, green: 0.67, blue: 0.06)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .themeShadow(ShadowStyle(color: Theme.Colors.accent.opacity(0.35), radius: 18, x: 0, y: 8))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Career stats row
+
+    private var careerStatsRow: some View {
+        HStack(spacing: 10) {
+            CareerStat(label: "HANDICAP",
+                       value: calculatedHandicap.map { String(format: "%.1f", $0) } ?? "--")
+            CareerStat(label: "AVG",
+                       value: avgScore.map { "\($0)" } ?? "--")
+            CareerStat(label: "BEST",
+                       value: bestScore.map { "\($0)" } ?? "--")
+            CareerStat(label: "ROUNDS",
+                       value: "\(completedRounds.count)")
+        }
+    }
+
+    // MARK: - Menu grid
+
+    private var menuGrid: some View {
+        VStack(spacing: 10) {
+            NavigationLink {
+                BagView()
+            } label: {
+                MenuRow(icon: "bag.fill", title: "MY BAG", subtitle: "LOADOUT & YARDAGES")
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink {
+                StatsDashboardView()
+            } label: {
+                MenuRow(icon: "chart.xyaxis.line", title: "STATS", subtitle: "CAREER ANALYTICS")
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink {
+                HistoryView()
+            } label: {
+                MenuRow(icon: "clock.arrow.circlepath", title: "HISTORY", subtitle: "\(completedRounds.count) ROUNDS PLAYED")
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Round cover
+
+    @ViewBuilder
+    private func roundCover(resume: Round?) -> some View {
+        if let resume {
+            RoundView(
+                locationService: locationService,
+                speechService: speechService,
+                shotParser: shotParser,
+                courseSearch: courseSearch,
+                clubRecommender: clubRecommender,
+                weatherService: weatherService,
+                elevationService: elevationService,
+                resumeRound: resume
+            )
+        } else {
+            RoundView(
+                locationService: locationService,
+                speechService: speechService,
+                shotParser: shotParser,
+                courseSearch: courseSearch,
+                clubRecommender: clubRecommender,
+                weatherService: weatherService,
+                elevationService: elevationService
+            )
         }
     }
 
@@ -367,92 +356,67 @@ struct HomeView: View {
     }
 }
 
-// MARK: - Stat Card
+// MARK: - Career stat
 
-private struct HomeStatCard: View {
+private struct CareerStat: View {
     let label: String
     let value: String
-    let sub: String?
-    let color: Color
 
     var body: some View {
         VStack(spacing: 4) {
             Text(label)
-                .font(.system(size: 8, weight: .heavy))
-                .foregroundStyle(color.opacity(0.6))
-                .tracking(0.5)
+                .font(Theme.Font.caption(9))
+                .foregroundStyle(Theme.Colors.textMuted)
+                .tracking(1)
             Text(value)
-                .font(.system(size: 24, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white)
-            if let sub {
-                Text(sub)
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
+                .font(Theme.Font.display(22))
+                .foregroundStyle(Theme.Colors.textPrimary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .background(Color(.systemGray6).opacity(0.6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .fill(Theme.Colors.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .strokeBorder(Theme.Colors.border, lineWidth: 1)
+        )
     }
 }
 
-struct QuickLink: View {
+// MARK: - Menu row
+
+private struct MenuRow: View {
     let icon: String
     let title: String
-    let sub: String
+    let subtitle: String
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 14) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.green)
-                .frame(width: 34, height: 34)
-                .background(.green.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 1) {
+                .font(.system(size: 17, weight: .heavy))
+                .foregroundStyle(Theme.Colors.accent)
+                .frame(width: 42, height: 42)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.tight, style: .continuous)
+                        .fill(Theme.Colors.accentSoft)
+                )
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.primary)
-                Text(sub)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Font.title(15))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .tracking(1)
+                Text(subtitle)
+                    .font(Theme.Font.caption(10))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .tracking(0.8)
             }
             Spacer()
             Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 13, weight: .heavy))
+                .foregroundStyle(Theme.Colors.textMuted)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemGray6).opacity(0.6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-// MARK: - Coming Soon
-
-struct ComingSoonSection: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("COMING SOON")
-                .font(.system(size: 10, weight: .heavy))
-                .foregroundStyle(.tertiary)
-                .tracking(1)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(["Live Leaderboard", "Skins & Nassau", "Group Rounds", "Practice Tracker"], id: \.self) { name in
-                        Text(name)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color(.systemGray3))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color(.systemGray6).opacity(0.3))
-                            .clipShape(Capsule())
-                    }
-                }
-            }
-        }
+        .gameCard()
     }
 }

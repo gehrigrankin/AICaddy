@@ -55,6 +55,7 @@ struct HolePlayView: View {
     var dangerAlert: DangerZoneAlert? = nil
     var windSpeed: Double? = nil
     var windDirection: String? = nil
+    var windBearing: Double? = nil
     var temperature: Int? = nil
     var suggestedFairway: Bool? = nil
     var suggestedGIR: Bool? = nil
@@ -134,119 +135,176 @@ struct HolePlayView: View {
 
     // MARK: - Top Overlay
 
-    private var topOverlay: some View {
-        HStack(spacing: 0) {
-            // Left: hole info + score
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
-                    Text("H\(hole.holeNumber)")
-                        .font(.system(size: 15, weight: .heavy))
-                        .foregroundStyle(.white)
-                    Text("P\(hole.par)")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
-                    if let y = hole.yardage {
-                        Text("\(y)y")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
-                }
-                HStack(spacing: 4) {
-                    Text(runningToPar == 0 ? "E" : (runningToPar > 0 ? "+\(runningToPar)" : "\(runningToPar)"))
-                        .font(.system(size: 10, weight: .bold))
-                    Text("thru \(holesPlayed > 0 ? "\(holesPlayed)" : "-")")
-                        .font(.system(size: 10))
-                    if let rec = clubRecommendation {
-                        HStack(spacing: 2) {
-                            Text("· \(rec.primaryClub.displayName)")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.green)
-                            if dangerAlert != nil {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .font(.system(size: 8))
-                                    .foregroundStyle(.orange)
-                            }
-                        }
-                        if let note = rec.adjustmentNote {
-                            Text(note)
-                                .font(.system(size: 8, weight: .medium))
-                                .foregroundStyle(.yellow.opacity(0.8))
-                        }
-                    }
-                }
-                .foregroundStyle(.white.opacity(0.5))
-                if let wind = windSpeed, let dir = windDirection {
-                    Text("\(Int(wind))mph \(dir)")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.cyan.opacity(0.7))
-                }
-            }
-
-            Spacer()
-
-            // Tips indicator
-            if !holeTips.isEmpty || dangerAlert != nil {
-                Button { showTipsSheet = true } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "lightbulb.fill")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.yellow)
-                            .frame(width: 28, height: 28)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
-                        if dangerAlert != nil {
-                            Circle()
-                                .fill(.red)
-                                .frame(width: 8, height: 8)
-                                .offset(x: 2, y: -2)
-                        }
-                    }
-                }
-                .sheet(isPresented: $showTipsSheet) {
-                    tipsSheet
-                }
-                .padding(.trailing, 4)
-            }
-
-            // Right: distances (from tee before first shot, from user after)
-            if let gps = holeGps, let loc = distanceMeasurePoint {
-                distanceRow(userLocation: loc, gps: gps)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.ultraThinMaterial.opacity(0.85))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+    private var scoreBadge: String {
+        if runningToPar == 0 { return "E" }
+        return runningToPar > 0 ? "+\(runningToPar)" : "\(runningToPar)"
     }
 
-    private func distanceRow(userLocation loc: CLLocationCoordinate2D, gps: HoleGps) -> some View {
-        HStack(spacing: 8) {
+    private var scoreColor: Color {
+        if runningToPar < 0 { return Theme.Colors.positive }
+        if runningToPar > 0 { return Theme.Colors.negative }
+        return Theme.Colors.textPrimary
+    }
+
+    private var topOverlay: some View {
+        HStack(alignment: .top, spacing: 10) {
+            playerCard
+            Spacer(minLength: 0)
+            WindCompass(
+                speedMph: windSpeed,
+                fromDegrees: windBearing
+            )
+            if !holeTips.isEmpty || dangerAlert != nil {
+                tipsButton
+            }
+            if let gps = holeGps, let loc = distanceMeasurePoint {
+                distanceCard(userLocation: loc, gps: gps)
+            }
+        }
+    }
+
+    private var playerCard: some View {
+        HStack(spacing: 10) {
+            // Hole number badge
+            VStack(spacing: 0) {
+                Text("HOLE")
+                    .font(Theme.Font.caption(8))
+                    .foregroundStyle(Theme.Colors.accent)
+                    .tracking(1)
+                Text("\(hole.holeNumber)")
+                    .font(Theme.Font.display(22))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+            }
+            .frame(width: 44, height: 44)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Theme.Colors.accentSoft)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Theme.Colors.accent.opacity(0.4), lineWidth: 1)
+            )
+
+            // Course info (par + yardage)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("PAR \(hole.par)")
+                    .font(Theme.Font.title(14))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .tracking(0.5)
+                if let y = hole.yardage {
+                    Text("\(y) YARDS")
+                        .font(Theme.Font.caption(9))
+                        .foregroundStyle(Theme.Colors.textMuted)
+                        .tracking(0.8)
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+
+            Rectangle()
+                .fill(Theme.Colors.divider)
+                .frame(width: 1, height: 34)
+                .padding(.horizontal, 2)
+
+            // Round score
+            VStack(spacing: 1) {
+                Text(scoreBadge)
+                    .font(Theme.Font.display(20))
+                    .foregroundStyle(scoreColor)
+                Text("THRU \(holesPlayed)")
+                    .font(Theme.Font.caption(8))
+                    .foregroundStyle(Theme.Colors.textMuted)
+                    .tracking(0.8)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .fill(Theme.Colors.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .strokeBorder(Theme.Colors.border, lineWidth: 1)
+        )
+        .themeShadow(Theme.Shadow.card)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var tipsButton: some View {
+        Button { showTipsSheet = true } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "lightbulb.fill")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(Theme.Colors.accent)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.Radius.tight, style: .continuous)
+                            .fill(Theme.Colors.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.Radius.tight, style: .continuous)
+                            .strokeBorder(Theme.Colors.border, lineWidth: 1)
+                    )
+                    .themeShadow(Theme.Shadow.pill)
+                if dangerAlert != nil {
+                    Circle()
+                        .fill(Theme.Colors.negative)
+                        .frame(width: 9, height: 9)
+                        .overlay(Circle().stroke(Theme.Colors.surface, lineWidth: 1.5))
+                        .offset(x: 3, y: -3)
+                }
+            }
+        }
+        .sheet(isPresented: $showTipsSheet) { tipsSheet }
+    }
+
+    private func distanceCard(userLocation loc: CLLocationCoordinate2D, gps: HoleGps) -> some View {
+        HStack(alignment: .top, spacing: 12) {
             if let front = gps.greenFront {
                 let d = LocationService.distanceYards(from: loc, to: front.coordinate)
-                VStack(spacing: 0) {
-                    Text("\(d)").font(.system(size: 14, weight: .heavy, design: .rounded)).foregroundStyle(.green)
-                    Text("F").font(.system(size: 7, weight: .bold)).foregroundStyle(.green.opacity(0.6))
-                }
+                distanceTile(label: "FRONT", yards: d, accent: Theme.Colors.positive, large: false)
             }
             if let center = gps.greenCenter {
                 let d = LocationService.distanceYards(from: loc, to: center.coordinate)
-                VStack(spacing: 0) {
-                    Text("\(d)").font(.system(size: 20, weight: .heavy, design: .rounded)).foregroundStyle(.white)
-                    Text("PIN").font(.system(size: 7, weight: .bold)).foregroundStyle(.white.opacity(0.6))
+                VStack(spacing: 1) {
+                    distanceTile(label: "PIN", yards: d, accent: Theme.Colors.textPrimary, large: true)
                     if let adj = clubRecommendation?.adjustedDistance, adj != d {
-                        Text("plays \(adj)")
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(.yellow.opacity(0.7))
+                        Text("PLAYS \(adj)")
+                            .font(Theme.Font.caption(8))
+                            .foregroundStyle(Theme.Colors.accent)
+                            .tracking(0.5)
                     }
                 }
             }
             if let back = gps.greenBack {
                 let d = LocationService.distanceYards(from: loc, to: back.coordinate)
-                VStack(spacing: 0) {
-                    Text("\(d)").font(.system(size: 14, weight: .heavy, design: .rounded)).foregroundStyle(.red)
-                    Text("B").font(.system(size: 7, weight: .bold)).foregroundStyle(.red.opacity(0.6))
-                }
+                distanceTile(label: "BACK", yards: d, accent: Theme.Colors.negative, large: false)
             }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .fill(Theme.Colors.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .strokeBorder(Theme.Colors.border, lineWidth: 1)
+        )
+        .themeShadow(Theme.Shadow.card)
+    }
+
+    private func distanceTile(label: String, yards: Int, accent: Color, large: Bool) -> some View {
+        VStack(spacing: 1) {
+            Text("\(yards)")
+                .font(Theme.Font.display(large ? 22 : 14))
+                .foregroundStyle(accent)
+                .contentTransition(.numericText())
+            Text(label)
+                .font(Theme.Font.caption(large ? 9 : 8))
+                .foregroundStyle(Theme.Colors.textMuted)
+                .tracking(0.8)
         }
     }
 

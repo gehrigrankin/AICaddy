@@ -95,20 +95,22 @@ struct RoundView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        if phase == .play {
-                            // Save progress before leaving
-                            dismiss()
-                        } else {
-                            dismiss()
-                        }
+                        dismiss()
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left")
-                            Text("Home")
+                                .font(.system(size: 13, weight: .heavy))
+                            Text("HOME")
+                                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                .tracking(1)
                         }
+                        .foregroundStyle(Theme.Colors.accent)
                     }
                 }
             }
+            .toolbarBackground(Theme.Colors.surface, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .onAppear {
             locationService.startTracking()
@@ -185,6 +187,7 @@ struct RoundView: View {
                         dangerAlert: currentDangerAlert,
                         windSpeed: weatherService.windSpeed,
                         windDirection: weatherService.windDirectionLabel,
+                        windBearing: weatherService.windDirection,
                         temperature: weatherService.temperature,
                         suggestedFairway: suggestedFairway,
                         suggestedGIR: suggestedGIR,
@@ -209,11 +212,14 @@ struct RoundView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(showScorecard ? "Hole" : "Card") {
+                    Button {
                         showScorecard.toggle()
+                    } label: {
+                        Text(showScorecard ? "HOLE" : "CARD")
+                            .font(.system(size: 12, weight: .heavy, design: .rounded))
+                            .tracking(1)
+                            .foregroundStyle(Theme.Colors.accent)
                     }
-                    .font(.subheadline.bold())
-                    .foregroundStyle(.green)
                 }
             }
         }
@@ -221,26 +227,37 @@ struct RoundView: View {
 
     private func holeDots(round: Round) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 ForEach(round.holes) { h in
                     Button {
                         currentHole = h.holeNumber
                     } label: {
                         Text("\(h.holeNumber)")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 11, weight: .heavy, design: .rounded))
                             .frame(width: 28, height: 28)
-                            .background(
-                                h.holeNumber == currentHole ? Color.green :
-                                    h.strokes > 0 ? Color(.systemGray4) : Color(.systemGray6)
+                            .foregroundStyle(
+                                h.holeNumber == currentHole
+                                    ? Theme.Colors.backdrop
+                                    : (h.strokes > 0 ? Theme.Colors.textPrimary : Theme.Colors.textMuted)
                             )
-                            .foregroundStyle(h.holeNumber == currentHole ? .white : .primary)
-                            .clipShape(Circle())
+                            .background(
+                                Circle()
+                                    .fill(
+                                        h.holeNumber == currentHole
+                                            ? Theme.Colors.accent
+                                            : (h.strokes > 0 ? Theme.Colors.surfaceElevated : Theme.Colors.surface)
+                                    )
+                            )
+                            .overlay(
+                                Circle().strokeBorder(Theme.Colors.border, lineWidth: 1)
+                            )
                     }
                 }
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
         }
+        .background(Theme.Colors.surface.opacity(0.85))
     }
 
     // MARK: - Hole binding

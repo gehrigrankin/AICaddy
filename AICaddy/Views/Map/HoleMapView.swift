@@ -163,14 +163,24 @@ struct DistancePill: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 0) {
-            Text(label)
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(color.opacity(0.7))
-            Text("\(yards)")
-                .font(.system(size: 24, weight: .heavy, design: .rounded))
-                .foregroundStyle(color)
-                .contentTransition(.numericText())
+        VStack(spacing: 2) {
+            Text(label.uppercased())
+                .font(Theme.Font.caption(9))
+                .foregroundStyle(Theme.Colors.textMuted)
+                .tracking(1)
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 6, height: 6)
+                Text("\(yards)")
+                    .font(Theme.Font.display(22))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .contentTransition(.numericText())
+                Text("y")
+                    .font(Theme.Font.label(11))
+                    .foregroundStyle(Theme.Colors.textMuted)
+                    .baselineOffset(-2)
+            }
         }
         .frame(maxWidth: .infinity)
     }

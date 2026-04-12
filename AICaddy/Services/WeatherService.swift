@@ -63,6 +63,17 @@ final class WeatherService {
         } catch {
             await MainActor.run {
                 self.error = "Weather unavailable"
+                #if DEBUG
+                // Seed mock wind so UI can be verified in simulator where WeatherKit often fails.
+                if self.windSpeed == nil {
+                    self.windSpeed = 12
+                    self.windDirection = 315  // from NW
+                    self.windDirectionLabel = Self.compassDirection(315)
+                    self.temperature = 68
+                    self.conditions = "Mock"
+                    self.lastUpdated = Date()
+                }
+                #endif
             }
         }
     }
