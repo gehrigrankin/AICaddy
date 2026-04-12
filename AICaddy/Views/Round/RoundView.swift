@@ -181,6 +181,8 @@ struct RoundView: View {
                         isLast: currentHole == 18,
                         speech: speechService,
                         shotParser: shotParser,
+                        onHome: { dismiss() },
+                        onToggleScorecard: { showScorecard.toggle() },
                         clubRecommendation: currentClubRecommendation,
                         holeTips: currentHoleTips,
                         smartAlert: currentSmartAlert,
@@ -196,7 +198,7 @@ struct RoundView: View {
                 }
 
                 #if DEBUG
-                if !showScorecard {
+                if showScorecard {
                     DebugLocationBar(
                         locationService: locationService,
                         holeGps: currentHoleGps
@@ -204,21 +206,24 @@ struct RoundView: View {
                 }
                 #endif
 
-                if !showScorecard {
+                if showScorecard {
                     holeDots(round: round)
                 }
             }
-            .navigationTitle("Hole \(currentHole)")
+            .navigationBarHidden(showScorecard == false)
+            .navigationTitle(showScorecard ? "SCORECARD" : "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showScorecard.toggle()
-                    } label: {
-                        Text(showScorecard ? "HOLE" : "CARD")
-                            .font(.system(size: 12, weight: .heavy, design: .rounded))
-                            .tracking(1)
-                            .foregroundStyle(Theme.Colors.accent)
+                if showScorecard {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            showScorecard.toggle()
+                        } label: {
+                            Text("HOLE")
+                                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                .tracking(1)
+                                .foregroundStyle(Theme.Colors.accent)
+                        }
                     }
                 }
             }

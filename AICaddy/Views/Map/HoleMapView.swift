@@ -825,8 +825,7 @@ struct NativeMapView: UIViewRepresentable {
                 view.image = img
                 view.frame.size = img.size
 
-            // ── Target: frosted glass card ──
-            // ── AI Caddy target: green-tinted scope with "Aim here" card ──
+            // ── AI Caddy target: navy card with gold accents ──
             case .caddyTarget:
                 let cardW: CGFloat = 120
                 let cardH: CGFloat = 48
@@ -834,24 +833,30 @@ struct NativeMapView: UIViewRepresentable {
                 let gap: CGFloat = 4
                 let totalH = cardH + gap + pinSize
 
+                // Theme colors baked into UIColor for Core Graphics
+                let navyFill = UIColor(red: 0.118, green: 0.165, blue: 0.227, alpha: 0.95)
+                let accentGold = UIColor(red: 0.961, green: 0.773, blue: 0.094, alpha: 1)
+                let borderColor = UIColor.white.withAlphaComponent(0.12)
+
                 let img = UIGraphicsImageRenderer(size: CGSize(width: cardW, height: totalH)).image { ctx in
                     let c = ctx.cgContext
 
-                    // Card
+                    // Card with shadow
                     let cardRect = CGRect(x: 0, y: 0, width: cardW, height: cardH)
-                    c.setFillColor(UIColor(red: 0.1, green: 0.3, blue: 0.15, alpha: 0.9).cgColor)
-                    let cardPath = UIBezierPath(roundedRect: cardRect, cornerRadius: 12)
+                    c.setFillColor(navyFill.cgColor)
+                    let cardPath = UIBezierPath(roundedRect: cardRect, cornerRadius: 14)
                     c.addPath(cardPath.cgPath)
                     c.fillPath()
-                    c.setStrokeColor(UIColor.systemGreen.withAlphaComponent(0.4).cgColor)
+                    c.setStrokeColor(borderColor.cgColor)
                     c.setLineWidth(1)
                     c.addPath(cardPath.cgPath)
                     c.strokePath()
 
-                    // "AIM HERE" label
+                    // "AIM HERE" label in gold
                     let aimStr = NSAttributedString(string: "AIM HERE", attributes: [
-                        .font: UIFont.systemFont(ofSize: 8, weight: .heavy),
-                        .foregroundColor: UIColor.systemGreen.withAlphaComponent(0.7)
+                        .font: UIFont.systemFont(ofSize: 9, weight: .heavy),
+                        .foregroundColor: accentGold,
+                        .kern: 1.0
                     ])
                     let aimSize = aimStr.size()
                     aimStr.draw(at: CGPoint(x: (cardW - aimSize.width) / 2, y: 4))
@@ -864,7 +869,7 @@ struct NativeMapView: UIViewRepresentable {
                         ])
                         let yardStr = NSAttributedString(string: "y", attributes: [
                             .font: UIFont.systemFont(ofSize: 10, weight: .medium),
-                            .foregroundColor: UIColor.white.withAlphaComponent(0.5)
+                            .foregroundColor: UIColor.white.withAlphaComponent(0.55)
                         ])
                         let full = NSMutableAttributedString()
                         full.append(mainStr)
@@ -873,32 +878,32 @@ struct NativeMapView: UIViewRepresentable {
                         if let d2 = golfAnn.secondaryDistance {
                             let arrow = NSAttributedString(string: "  → \(d2)y pin", attributes: [
                                 .font: UIFont.systemFont(ofSize: 9, weight: .semibold),
-                                .foregroundColor: UIColor.white.withAlphaComponent(0.35)
+                                .foregroundColor: UIColor.white.withAlphaComponent(0.5)
                             ])
                             full.append(arrow)
                         }
 
                         let fullSize = full.size()
-                        full.draw(at: CGPoint(x: (cardW - fullSize.width) / 2, y: 16))
+                        full.draw(at: CGPoint(x: (cardW - fullSize.width) / 2, y: 18))
                     }
 
                     // Connector
-                    c.setStrokeColor(UIColor.systemGreen.withAlphaComponent(0.4).cgColor)
-                    c.setLineWidth(1)
+                    c.setStrokeColor(accentGold.withAlphaComponent(0.6).cgColor)
+                    c.setLineWidth(1.5)
                     c.move(to: CGPoint(x: cardW / 2, y: cardH))
                     c.addLine(to: CGPoint(x: cardW / 2, y: cardH + gap))
                     c.strokePath()
 
-                    // Ring
+                    // Target ring
                     let ringY = cardH + gap
                     let pinX = (cardW - pinSize) / 2
-                    c.setFillColor(UIColor.systemGreen.withAlphaComponent(0.1).cgColor)
+                    c.setFillColor(accentGold.withAlphaComponent(0.15).cgColor)
                     c.fillEllipse(in: CGRect(x: pinX - 4, y: ringY - 4, width: pinSize + 8, height: pinSize + 8))
-                    c.setStrokeColor(UIColor.systemGreen.cgColor)
+                    c.setStrokeColor(accentGold.cgColor)
                     c.setLineWidth(2.5)
                     c.strokeEllipse(in: CGRect(x: pinX + 1, y: ringY + 1, width: pinSize - 2, height: pinSize - 2))
                     let dotS: CGFloat = 5
-                    c.setFillColor(UIColor.systemGreen.cgColor)
+                    c.setFillColor(accentGold.cgColor)
                     c.fillEllipse(in: CGRect(x: (cardW - dotS) / 2, y: ringY + (pinSize - dotS) / 2, width: dotS, height: dotS))
                 }
 

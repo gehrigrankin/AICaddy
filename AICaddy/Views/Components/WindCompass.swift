@@ -42,32 +42,32 @@ struct WindCompass: View {
             ForEach(0..<8) { i in
                 Rectangle()
                     .fill(Theme.Colors.textMuted.opacity(0.35))
-                    .frame(width: 1, height: i % 2 == 0 ? 6 : 3)
-                    .offset(y: -28)
+                    .frame(width: 1, height: i % 2 == 0 ? 4 : 2)
+                    .offset(y: -19)
                     .rotationEffect(.degrees(Double(i) * 45))
             }
 
             // Speed + label stacked in the middle
-            VStack(spacing: 0) {
+            VStack(spacing: -1) {
                 Text(speedText)
-                    .font(Theme.Font.display(18))
+                    .font(Theme.Font.display(13))
                     .foregroundStyle(hasData ? Theme.Colors.textPrimary : Theme.Colors.textMuted)
                 Text(label)
-                    .font(Theme.Font.caption(9))
+                    .font(Theme.Font.caption(7))
                     .foregroundStyle(hasData ? Theme.Colors.accent : Theme.Colors.textMuted)
-                    .tracking(1)
+                    .tracking(0.8)
             }
 
             // Arrow (hidden when no data)
             if hasData {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 12, weight: .black))
+                    .font(.system(size: 9, weight: .black))
                     .foregroundStyle(Theme.Colors.accent)
-                    .offset(y: -24)
+                    .offset(y: -16)
                     .rotationEffect(.degrees(arrowRotation))
             }
         }
-        .frame(width: 72, height: 72)
+        .frame(width: 50, height: 50)
         .themeShadow(Theme.Shadow.pill)
     }
 }
