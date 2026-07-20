@@ -48,6 +48,16 @@
 			path = AICaddy;
 			sourceTree = "<group>";
 		};
+		AA10000000000000000000A1 /* AICaddyTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AICaddyTests;
+			sourceTree = "<group>";
+		};
+		AA10000000000000000000A2 /* AICaddyUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AICaddyUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -79,6 +89,8 @@
 			isa = PBXGroup;
 			children = (
 				30C7A5492F86019B004E8722 /* AICaddy */,
+				AA10000000000000000000A1 /* AICaddyTests */,
+				AA10000000000000000000A2 /* AICaddyUITests */,
 				30C7A5482F86019B004E8722 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -131,6 +143,9 @@
 			dependencies = (
 				30C7A5592F86019E004E8722 /* PBXTargetDependency */,
 			);
+			fileSystemSynchronizedGroups = (
+				AA10000000000000000000A1 /* AICaddyTests */,
+			);
 			name = AICaddyTests;
 			packageProductDependencies = (
 			);
@@ -150,6 +165,9 @@
 			);
 			dependencies = (
 				30C7A5632F86019E004E8722 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AA10000000000000000000A2 /* AICaddyUITests */,
 			);
 			name = AICaddyUITests;
 			packageProductDependencies = (
