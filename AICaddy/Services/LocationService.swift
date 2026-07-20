@@ -20,6 +20,51 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
             if let sim = simulatedLocation {
                 location = sim
                 accuracy = 5.0
+            } else {
+                // Returning to real GPS cancels any in-progress simulated drive
+                driveTimer?.invalidate()
+                driveTimer = nil
+            }
+        }
+    }
+
+    private var driveTimer: Timer?
+
+    /// Animate the simulated position to a destination like riding the cart —
+    /// distances tick down live instead of teleporting.
+    func simulateDrive(to destination: CLLocationCoordinate2D, speedMps: Double = 9.0) {
+        driveTimer?.invalidate()
+        guard let start = simulatedLocation ?? location else {
+            simulatedLocation = destination
+            return
+        }
+
+        let startLoc = CLLocation(latitude: start.latitude, longitude: start.longitude)
+        let endLoc = CLLocation(latitude: destination.latitude, longitude: destination.longitude)
+        let dist = startLoc.distance(from: endLoc)
+        guard dist > 2 else {
+            simulatedLocation = destination
+            return
+        }
+
+        // Real cart pace, but capped so long rides don't drag in testing
+        let duration = min(max(dist / speedMps, 0.8), 8.0)
+        let startTime = Date()
+
+        driveTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15.0, repeats: true) { [weak self] timer in
+            guard let self else {
+                timer.invalidate()
+                return
+            }
+            let t = min(Date().timeIntervalSince(startTime) / duration, 1.0)
+            // Ease in-out so the "cart" accelerates and brakes
+            let eased = t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2
+            let lat = start.latitude + (destination.latitude - start.latitude) * eased
+            let lng = start.longitude + (destination.longitude - start.longitude) * eased
+            self.simulatedLocation = CLLocationCoordinate2D(latitude: lat, longitude: lng)
+            if t >= 1.0 {
+                timer.invalidate()
+                self.driveTimer = nil
             }
         }
     }

@@ -31,6 +31,8 @@ struct HolePlayView: View {
     @State private var panelHeight: PanelHeight = .simple
     @State private var showNotesSheet = false
     @State private var notesDraft = ""
+    @State private var showClubPicker = false
+    @State private var draggedCaddyTarget: CLLocationCoordinate2D?
     @State private var showCompletionSheet = false
     @State private var sheetStrokes: Int = 0
     @State private var sheetPutts: Int = 2
@@ -62,6 +64,17 @@ struct HolePlayView: View {
     var suggestedFairway: Bool? = nil
     var suggestedGIR: Bool? = nil
     var caddyTarget: CLLocationCoordinate2D? = nil
+    /// Course center for map framing when the hole has no GPS data.
+    var courseLocation: CLLocationCoordinate2D? = nil
+    /// Reports where the player marked their shot (dragged aim target) —
+    /// lets the debug sim "drive to the ball".
+    var onAimTargetChanged: ((CLLocationCoordinate2D?) -> Void)? = nil
+    /// Saves user-mapped tee/green for holes OSM has no data for.
+    var onHoleMapped: ((CLLocationCoordinate2D, CLLocationCoordinate2D) -> Void)? = nil
+
+    // Hole-mapping flow (tap tee, tap green)
+    @State private var isMappingHole = false
+    @State private var mappedTee: CLLocationCoordinate2D?
 
     @State private var showTipsSheet = false
     @State private var smartAlertDismissed = false
@@ -71,12 +84,88 @@ struct HolePlayView: View {
     private var runningToPar: Int { totalScore - totalPar }
     private var holesPlayed: Int { hole.holeNumber - 1 }
 
-    /// Measure distance from tee box before first shot, from user position after
+    /// Where distances measure from. Follows the player as they move — the
+    /// old "tee until a shot is logged" rule froze every yardage at the tee
+    /// number for players who don't log shots immediately.
     private var distanceMeasurePoint: CLLocationCoordinate2D? {
-        if hole.shots.isEmpty, let tee = holeGps?.tee {
-            return tee.coordinate
+        guard let loc = userLocation else {
+            return holeGps?.tee?.coordinate
         }
-        return userLocation
+
+        if let tee = holeGps?.tee {
+            let distFromTee = LocationService.distanceYards(from: loc, to: tee.coordinate)
+
+            // Standing on/near the tee box: snap to the tee for clean planning numbers
+            if hole.shots.isEmpty && distFromTee < 30 {
+                return tee.coordinate
+            }
+
+            // GPS nowhere near this hole (previewing from home): measure from the tee
+            if let green = holeGps?.greenCenter {
+                let distFromGreen = LocationService.distanceYards(from: loc, to: green.coordinate)
+                if min(distFromTee, distFromGreen) > 1100 {
+                    return tee.coordinate
+                }
+            }
+        }
+
+        return loc
+    }
+
+    /// Distance (yards) from the current origin to the green center.
+    private var yardsToGreen: Int? {
+        guard let origin = distanceMeasurePoint,
+              let green = holeGps?.greenCenter else { return nil }
+        return LocationService.distanceYards(from: origin, to: green.coordinate)
+    }
+
+    /// Pick the bag club whose effective yardage gets closest to the pin (ties → longer club).
+    /// Falls back to the longest club overall if yardages or green data are missing.
+    private func defaultClubForDistance() -> Club? {
+        let candidates = (bagClubs.isEmpty ? BagClub.defaultBag : bagClubs)
+            .compactMap { bc -> (Club, Int)? in
+                guard let y = bc.effectiveYardage, y > 0 else { return nil }
+                return (bc.club, y)
+            }
+        guard !candidates.isEmpty else { return nil }
+
+        if let target = yardsToGreen {
+            return candidates.min { a, b in
+                let da = abs(a.1 - target)
+                let db = abs(b.1 - target)
+                if da != db { return da < db }
+                return a.1 > b.1
+            }?.0
+        }
+        return candidates.max(by: { $0.1 < $1.1 })?.0
+    }
+
+    /// Target coordinate when a club is actively aimed. Placed along the fairway
+    /// centerline at the selected club's distance from the origin.
+    private var aimedClubTarget: CLLocationCoordinate2D? {
+        guard let club = selectedClub,
+              let gps = holeGps,
+              let origin = distanceMeasurePoint,
+              let bag = bagClubs.first(where: { $0.club == club }),
+              let yards = bag.effectiveYardage else {
+            return nil
+        }
+        return CourseStrategyService.interpolateAlongFairway(
+            from: origin,
+            holeGps: gps,
+            targetDistance: yards
+        )
+    }
+
+    /// Effective caddy target shown on the map. Priority:
+    /// user-dragged override → aimed club position → AI caddy suggestion.
+    private var effectiveCaddyTarget: CLLocationCoordinate2D? {
+        draggedCaddyTarget ?? aimedClubTarget ?? caddyTarget
+    }
+
+    /// Label shown on the aim card: selected club name if aiming, else nil (annotation falls back to "AIM HERE").
+    private var effectiveCaddyLabel: String? {
+        selectedClub?.displayName
     }
 
     var body: some View {
@@ -88,7 +177,20 @@ struct HolePlayView: View {
                 par: hole.par,
                 userLocation: userLocation,
                 distanceMeasurePoint: distanceMeasurePoint,
-                caddyTarget: holeGps != nil ? caddyTarget : nil
+                courseLocation: courseLocation,
+                caddyTarget: holeGps != nil ? effectiveCaddyTarget : nil,
+                caddyTargetLabel: holeGps != nil ? effectiveCaddyLabel : nil,
+                onCaddyTargetDragged: { coord in
+                    draggedCaddyTarget = coord
+                    onAimTargetChanged?(coord)
+                },
+                isMappingMode: isMappingHole,
+                onMapTap: handleMappingTap,
+                mappingPreviewTee: isMappingHole ? mappedTee : nil,
+                onTargetPlaced: { coord in
+                    // The long-press marker doubles as "my ball is here"
+                    onAimTargetChanged?(coord)
+                }
             )
             .ignoresSafeArea()
 
@@ -98,6 +200,18 @@ struct HolePlayView: View {
                 topOverlay
                     .padding(.horizontal, 12)
                     .padding(.top, 4)
+
+                // Hole-mapping: OSM has no data for many courses — let the
+                // player map the hole in two taps (tee, then green).
+                if isMappingHole {
+                    mappingBanner
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                } else if holeGps?.tee == nil || holeGps?.greenCenter == nil {
+                    mapThisHoleButton
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                }
 
                 // Smart alert banner (dismissible)
                 if let alert = smartAlert, !smartAlertDismissed {
@@ -109,6 +223,14 @@ struct HolePlayView: View {
 
                 Spacer()
 
+                // Floating club selector — above the bottom panel, leading edge
+                HStack {
+                    clubSelectButton
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+
                 // Bottom panel
                 bottomPanel
                     .padding(.horizontal, 12)
@@ -118,6 +240,24 @@ struct HolePlayView: View {
                 smartAlertDismissed = false
                 fairwayManuallySet = false
                 girManuallySet = false
+                draggedCaddyTarget = nil
+                onAimTargetChanged?(nil)
+                selectedClub = defaultClubForDistance()
+                isMappingHole = false
+                mappedTee = nil
+            }
+            .onChange(of: selectedClub) { _, _ in
+                draggedCaddyTarget = nil
+            }
+            .onAppear {
+                if selectedClub == nil {
+                    selectedClub = defaultClubForDistance()
+                }
+            }
+            .onChange(of: holeGps?.tee?.lat) { _, _ in
+                if selectedClub == nil {
+                    selectedClub = defaultClubForDistance()
+                }
             }
             .onChange(of: suggestedFairway) { _, newValue in
                 if !fairwayManuallySet, let val = newValue, hole.fairwayHit == nil {
@@ -135,6 +275,70 @@ struct HolePlayView: View {
         }
     }
 
+    // MARK: - Hole Mapping (tap tee, tap green)
+
+    private var mapThisHoleButton: some View {
+        Button {
+            isMappingHole = true
+            mappedTee = nil
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "mappin.and.ellipse")
+                    .font(.system(size: 13, weight: .heavy))
+                Text("MAP THIS HOLE")
+                    .font(Theme.Font.title(12))
+                    .tracking(1)
+            }
+            .foregroundStyle(Theme.Colors.backdrop)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Capsule().fill(Theme.Colors.accent))
+            .themeShadow(ShadowStyle(color: Theme.Colors.accent.opacity(0.35), radius: 10, x: 0, y: 4))
+        }
+    }
+
+    private var mappingBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: mappedTee == nil ? "figure.golf" : "flag.fill")
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(Theme.Colors.accent)
+            Text(mappedTee == nil ? "TAP THE TEE BOX" : "NOW TAP THE GREEN")
+                .font(Theme.Font.title(13))
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .tracking(1)
+            Spacer()
+            Button {
+                isMappingHole = false
+                mappedTee = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(Theme.Colors.textMuted)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Theme.Colors.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Theme.Colors.accent.opacity(0.5), lineWidth: 1)
+        )
+        .themeShadow(Theme.Shadow.pill)
+    }
+
+    private func handleMappingTap(_ coordinate: CLLocationCoordinate2D) {
+        if mappedTee == nil {
+            mappedTee = coordinate
+        } else if let tee = mappedTee {
+            isMappingHole = false
+            mappedTee = nil
+            onHoleMapped?(tee, coordinate)
+        }
+    }
+
     // MARK: - Top Overlay
 
     private var scoreBadge: String {
@@ -149,70 +353,81 @@ struct HolePlayView: View {
     }
 
     private var topOverlay: some View {
-        HStack(alignment: .top, spacing: 8) {
-            iconButton(systemName: "chevron.left") { onHome?() }
-            playerCard
-            Spacer(minLength: 0)
-            WindCompass(
-                speedMph: windSpeed,
-                fromDegrees: windBearing
-            )
-            if !holeTips.isEmpty || dangerAlert != nil {
-                tipsButton
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                playerCard
+                Spacer(minLength: 0)
+                WindCompass(
+                    speedMph: windSpeed,
+                    fromDegrees: windBearing
+                )
+                if !holeTips.isEmpty || dangerAlert != nil {
+                    tipsButton
+                }
+                scorecardButton
             }
+
             if let gps = holeGps, let loc = distanceMeasurePoint {
-                distanceCard(userLocation: loc, gps: gps)
+                HStack {
+                    distanceCard(userLocation: loc, gps: gps)
+                    Spacer(minLength: 0)
+                }
             }
-            iconButton(systemName: "list.bullet.rectangle") { onToggleScorecard?() }
         }
     }
 
-    private func iconButton(systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 14, weight: .heavy))
-                .foregroundStyle(Theme.Colors.accent)
-                .frame(width: 38, height: 38)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Theme.Colors.surface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Theme.Colors.border, lineWidth: 1)
-                )
-                .themeShadow(Theme.Shadow.pill)
+    private var scorecardButton: some View {
+        Button { onToggleScorecard?() } label: {
+            VStack(spacing: 2) {
+                Image(systemName: "list.bullet.rectangle.fill")
+                    .font(.system(size: 18, weight: .heavy))
+                    .foregroundStyle(Theme.Colors.backdrop)
+                Text("CARD")
+                    .font(Theme.Font.caption(9))
+                    .foregroundStyle(Theme.Colors.backdrop)
+                    .tracking(1)
+            }
+            .frame(width: 56, height: 54)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Theme.Colors.accent)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Theme.Colors.accent, lineWidth: 1)
+            )
+            .themeShadow(ShadowStyle(color: Theme.Colors.accent.opacity(0.35), radius: 10, x: 0, y: 4))
         }
     }
 
     private var playerCard: some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 0) {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text("H\(hole.holeNumber) · PAR \(hole.par)")
-                    .font(Theme.Font.title(12))
+                    .font(Theme.Font.title(13))
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .tracking(0.5)
                 if let y = hole.yardage {
                     Text("\(y)Y")
-                        .font(Theme.Font.caption(9))
+                        .font(Theme.Font.caption(10))
                         .foregroundStyle(Theme.Colors.textMuted)
                 }
             }
             Rectangle()
                 .fill(Theme.Colors.divider)
-                .frame(width: 1, height: 22)
+                .frame(width: 1, height: 28)
             Text(scoreBadge)
-                .font(Theme.Font.display(16))
+                .font(Theme.Font.display(20))
                 .foregroundStyle(scoreColor)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .frame(height: 54)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Theme.Colors.surface)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(Theme.Colors.border, lineWidth: 1)
         )
         .themeShadow(Theme.Shadow.pill)
@@ -251,19 +466,19 @@ struct HolePlayView: View {
         HStack(alignment: .center, spacing: 8) {
             if let front = gps.greenFront {
                 let d = LocationService.distanceYards(from: loc, to: front.coordinate)
-                distanceTile(label: "F", yards: d, accent: Theme.Colors.positive, large: false)
+                smallDistanceTile(label: "F", yards: d, accent: Theme.Colors.positive)
             }
             if let center = gps.greenCenter {
                 let d = LocationService.distanceYards(from: loc, to: center.coordinate)
-                distanceTile(label: "PIN", yards: d, accent: Theme.Colors.textPrimary, large: true)
+                pinDistanceTile(yards: d)
             }
             if let back = gps.greenBack {
                 let d = LocationService.distanceYards(from: loc, to: back.coordinate)
-                distanceTile(label: "B", yards: d, accent: Theme.Colors.negative, large: false)
+                smallDistanceTile(label: "B", yards: d, accent: Theme.Colors.negative)
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .frame(height: 42)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Theme.Colors.surface)
@@ -275,14 +490,26 @@ struct HolePlayView: View {
         .themeShadow(Theme.Shadow.pill)
     }
 
-    private func distanceTile(label: String, yards: Int, accent: Color, large: Bool) -> some View {
+    private func pinDistanceTile(yards: Int) -> some View {
+        VStack(spacing: -1) {
+            Text("yds to pin")
+                .font(Theme.Font.caption(8))
+                .foregroundStyle(Theme.Colors.textMuted)
+            Text("\(yards)")
+                .font(Theme.Font.display(17))
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .contentTransition(.numericText())
+        }
+    }
+
+    private func smallDistanceTile(label: String, yards: Int, accent: Color) -> some View {
         VStack(spacing: 0) {
             Text("\(yards)")
-                .font(Theme.Font.display(large ? 18 : 12))
+                .font(Theme.Font.display(11))
                 .foregroundStyle(accent)
                 .contentTransition(.numericText())
             Text(label)
-                .font(Theme.Font.caption(large ? 8 : 7))
+                .font(Theme.Font.caption(7))
                 .foregroundStyle(Theme.Colors.textMuted)
                 .tracking(0.5)
         }
@@ -291,36 +518,44 @@ struct HolePlayView: View {
     // MARK: - Smart Alert Banner
 
     private func smartAlertBanner(_ alert: SmartAlert) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Image(systemName: alert.icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white)
-            Text(alert.message)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.white)
+                .font(.system(size: 11, weight: .heavy))
+                .foregroundStyle(smartAlertColor(for: alert.type))
+            Text(alert.message.uppercased())
+                .font(Theme.Font.caption(10))
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .tracking(0.5)
                 .lineLimit(1)
             Spacer(minLength: 4)
             Button {
                 withAnimation(.easeOut(duration: 0.2)) { smartAlertDismissed = true }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .font(.system(size: 9, weight: .heavy))
+                    .foregroundStyle(Theme.Colors.textMuted)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(smartAlertColor(for: alert.type).opacity(0.85))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Theme.Colors.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(smartAlertColor(for: alert.type).opacity(0.5), lineWidth: 1)
+        )
+        .themeShadow(Theme.Shadow.pill)
     }
 
     private func smartAlertColor(for type: SmartAlert.AlertType) -> Color {
         switch type {
-        case .momentum: return .orange
-        case .pace: return .purple
-        case .fatigue: return .blue
-        case .milestone: return .yellow
-        case .weather: return .cyan
+        case .momentum: return Theme.Colors.accent
+        case .pace: return Theme.Colors.accent
+        case .fatigue: return Theme.Colors.textSecondary
+        case .milestone: return Theme.Colors.positive
+        case .weather: return Theme.Colors.textSecondary
         }
     }
 
@@ -328,41 +563,90 @@ struct HolePlayView: View {
 
     private var tipsSheet: some View {
         NavigationStack {
-            List {
-                if let danger = dangerAlert {
-                    Section("Danger Zone") {
-                        Label {
-                            Text(danger.message)
-                                .font(.subheadline)
-                        } icon: {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(danger.severity == .high ? .red : .orange)
+            ZStack {
+                Theme.Colors.backdrop.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        if let danger = dangerAlert {
+                            tipSection(title: "DANGER ZONE", color: Theme.Colors.negative) {
+                                tipRow(
+                                    icon: "exclamationmark.triangle.fill",
+                                    iconColor: danger.severity == .high ? Theme.Colors.negative : Theme.Colors.accent,
+                                    message: danger.message
+                                )
+                            }
                         }
-                    }
-                }
-                if !holeTips.isEmpty {
-                    Section("Hole Tips") {
-                        ForEach(holeTips) { tip in
-                            Label {
-                                Text(tip.message)
-                                    .font(.subheadline)
-                            } icon: {
-                                Image(systemName: tipIcon(for: tip.type))
-                                    .foregroundStyle(tipColor(for: tip.type))
+                        if !holeTips.isEmpty {
+                            tipSection(title: "HOLE TIPS", color: Theme.Colors.accent) {
+                                ForEach(holeTips) { tip in
+                                    tipRow(
+                                        icon: tipIcon(for: tip.type),
+                                        iconColor: tipColor(for: tip.type),
+                                        message: tip.message
+                                    )
+                                }
                             }
                         }
                     }
+                    .padding(16)
                 }
             }
-            .navigationTitle("Hole \(hole.holeNumber) Tips")
+            .navigationTitle("HOLE \(hole.holeNumber) TIPS")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { showTipsSheet = false }
+                    Button {
+                        showTipsSheet = false
+                    } label: {
+                        Text("DONE")
+                            .font(Theme.Font.caption(12))
+                            .foregroundStyle(Theme.Colors.accent)
+                            .tracking(1)
+                    }
                 }
             }
+            .toolbarBackground(Theme.Colors.surface, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
         .presentationDetents([.medium])
+        .preferredColorScheme(.dark)
+    }
+
+    @ViewBuilder
+    private func tipSection<Content: View>(title: String, color: Color, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(Theme.Font.caption(10))
+                .foregroundStyle(color)
+                .tracking(1.2)
+            content()
+        }
+    }
+
+    private func tipRow(icon: String, iconColor: Color, message: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(iconColor)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(iconColor.opacity(0.15))
+                )
+            Text(message)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .fill(Theme.Colors.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .strokeBorder(Theme.Colors.border, lineWidth: 1)
+        )
     }
 
     private func tipIcon(for type: CourseHistoryService.TipType) -> String {
@@ -376,10 +660,10 @@ struct HolePlayView: View {
 
     private func tipColor(for type: CourseHistoryService.TipType) -> Color {
         switch type {
-        case .noteFromPast: return .blue
-        case .missTendency: return .orange
-        case .scoringPattern: return .purple
-        case .strategy: return .green
+        case .noteFromPast: return Theme.Colors.textSecondary
+        case .missTendency: return Theme.Colors.negative
+        case .scoringPattern: return Theme.Colors.accent
+        case .strategy: return Theme.Colors.positive
         }
     }
 
@@ -531,10 +815,6 @@ struct HolePlayView: View {
                 .frame(width: 44)
             }
             .sensoryFeedback(.impact(weight: .light), trigger: hole.strokes)
-
-            statsRow
-
-            clubSelectorRow
 
             if parsing {
                 Text("PROCESSING...")
@@ -801,52 +1081,142 @@ struct HolePlayView: View {
 
     // MARK: - Club Selector
 
-    private var clubSelectorRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(bagClubs.isEmpty ? BagClub.defaultBag : bagClubs) { bagClub in
-                    let isSelected = selectedClub == bagClub.club
-                    Button {
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            if isSelected {
-                                selectedClub = nil
-                            } else {
-                                selectedClub = bagClub.club
-                                recordClubSelection(bagClub.club)
-                            }
-                        }
-                    } label: {
-                        VStack(spacing: 1) {
-                            Text(bagClub.club.displayName.uppercased())
-                                .font(Theme.Font.label(10))
-                                .tracking(0.5)
-                            if let y = bagClub.effectiveYardage {
-                                Text("\(y)Y")
-                                    .font(Theme.Font.caption(8))
-                                    .foregroundStyle(isSelected ? Theme.Colors.backdrop.opacity(0.7) : Theme.Colors.textMuted)
-                            }
-                            if isSelected, let thought = bagClub.swingThought, !thought.isEmpty {
-                                Text(thought)
-                                    .font(.system(size: 7, weight: .medium).italic())
-                                    .foregroundStyle(Theme.Colors.backdrop.opacity(0.65))
-                            }
-                        }
-                        .foregroundStyle(isSelected ? Theme.Colors.backdrop : Theme.Colors.textSecondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: Theme.Radius.tight, style: .continuous)
-                                .fill(isSelected ? Theme.Colors.accent : Theme.Colors.surfaceDeep)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.Radius.tight, style: .continuous)
-                                .strokeBorder(isSelected ? Theme.Colors.accent : Theme.Colors.border, lineWidth: 1)
-                        )
-                    }
+    private var selectedBagClub: BagClub? {
+        guard let c = selectedClub else { return nil }
+        return (bagClubs.isEmpty ? BagClub.defaultBag : bagClubs).first { $0.club == c }
+    }
+
+    private var clubSelectButton: some View {
+        Button { showClubPicker = true } label: {
+            VStack(spacing: 2) {
+                Text(selectedBagClub?.club.displayName.uppercased() ?? "CLUB")
+                    .font(Theme.Font.label(11))
+                    .foregroundStyle(Theme.Colors.accent)
+                    .tracking(0.5)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                if let y = selectedBagClub?.effectiveYardage {
+                    Text("\(y)Y")
+                        .font(Theme.Font.display(16))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                } else {
+                    Text("--")
+                        .font(Theme.Font.display(16))
+                        .foregroundStyle(Theme.Colors.textMuted)
                 }
             }
-            .padding(.horizontal, 2)
+            .frame(width: 82, height: 64)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Theme.Colors.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Theme.Colors.accent.opacity(0.5), lineWidth: 1.5)
+            )
+            .themeShadow(Theme.Shadow.pill)
         }
+        .sheet(isPresented: $showClubPicker) {
+            clubPickerSheet
+        }
+    }
+
+    private var clubPickerSheet: some View {
+        let sortedClubs = (bagClubs.isEmpty ? BagClub.defaultBag : bagClubs)
+            .sorted { (a, b) in
+                // Longest → shortest, with putter last, nil yardages last
+                if a.club == .putter { return false }
+                if b.club == .putter { return true }
+                switch (a.effectiveYardage, b.effectiveYardage) {
+                case let (ay?, by?): return ay > by
+                case (_?, nil): return true
+                case (nil, _?): return false
+                default: return false
+                }
+            }
+        return ZStack {
+            Theme.Colors.backdrop.ignoresSafeArea()
+            VStack(spacing: 14) {
+                VStack(spacing: 4) {
+                    Text("SELECT CLUB")
+                        .font(Theme.Font.display(20))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .tracking(2)
+                    if let y = yardsToGreen {
+                        Text("\(y)Y TO PIN")
+                            .font(Theme.Font.caption(11))
+                            .foregroundStyle(Theme.Colors.accent)
+                            .tracking(1)
+                    }
+                }
+                .padding(.top, 16)
+
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(sortedClubs) { bc in
+                            clubPickerRow(bc)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .preferredColorScheme(.dark)
+    }
+
+    private func clubPickerRow(_ bc: BagClub) -> some View {
+        let isSelected = selectedClub == bc.club
+        let diff: Int? = {
+            guard let y = bc.effectiveYardage, let pin = yardsToGreen else { return nil }
+            return y - pin
+        }()
+        return Button {
+            selectedClub = bc.club
+            showClubPicker = false
+        } label: {
+            HStack(spacing: 12) {
+                Text(bc.club.displayName.uppercased())
+                    .font(Theme.Font.title(15))
+                    .foregroundStyle(isSelected ? Theme.Colors.backdrop : Theme.Colors.textPrimary)
+                    .tracking(0.5)
+                    .frame(width: 90, alignment: .leading)
+
+                Spacer()
+
+                if let d = diff {
+                    Text(d == 0 ? "ON PIN" : (d > 0 ? "+\(d)Y" : "\(d)Y"))
+                        .font(Theme.Font.caption(10))
+                        .foregroundStyle(isSelected ? Theme.Colors.backdrop.opacity(0.7) : Theme.Colors.textMuted)
+                        .tracking(0.5)
+                }
+
+                if let y = bc.effectiveYardage {
+                    Text("\(y)Y")
+                        .font(Theme.Font.display(18))
+                        .foregroundStyle(isSelected ? Theme.Colors.backdrop : Theme.Colors.accent)
+                        .frame(width: 68, alignment: .trailing)
+                } else {
+                    Text("--")
+                        .font(Theme.Font.display(18))
+                        .foregroundStyle(Theme.Colors.textMuted)
+                        .frame(width: 68, alignment: .trailing)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                    .fill(isSelected ? Theme.Colors.accent : Theme.Colors.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                    .strokeBorder(isSelected ? Theme.Colors.accent : Theme.Colors.border, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func recordClubSelection(_ club: Club) {
@@ -1009,6 +1379,20 @@ struct HolePlayView: View {
                         .padding(.horizontal, 40)
                     }
 
+                    if hole.par >= 4 {
+                        sheetTripleToggle(
+                            label: "FAIRWAY HIT?",
+                            value: hole.fairwayHit,
+                            onChange: { hole.fairwayHit = $0 }
+                        )
+                    }
+
+                    sheetTripleToggle(
+                        label: "GREEN IN REGULATION?",
+                        value: hole.greenInRegulation,
+                        onChange: { hole.greenInRegulation = $0 }
+                    )
+
                     Spacer()
 
                     Button {
@@ -1054,6 +1438,42 @@ struct HolePlayView: View {
             .presentationDragIndicator(.visible)
         }
         .preferredColorScheme(.dark)
+    }
+
+    private func sheetTripleToggle(label: String, value: Bool?, onChange: @escaping (Bool?) -> Void) -> some View {
+        VStack(spacing: 8) {
+            Text(label)
+                .font(Theme.Font.caption(10))
+                .foregroundStyle(Theme.Colors.textMuted)
+                .tracking(1)
+            HStack(spacing: 8) {
+                tripleButton(title: "YES", isSelected: value == true, tint: Theme.Colors.positive) {
+                    onChange(value == true ? nil : true)
+                }
+                tripleButton(title: "NO", isSelected: value == false, tint: Theme.Colors.negative) {
+                    onChange(value == false ? nil : false)
+                }
+            }
+        }
+    }
+
+    private func tripleButton(title: String, isSelected: Bool, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(Theme.Font.title(13))
+                .tracking(1)
+                .foregroundStyle(isSelected ? Theme.Colors.backdrop : Theme.Colors.textPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.tight, style: .continuous)
+                        .fill(isSelected ? tint : Theme.Colors.surfaceElevated)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.tight, style: .continuous)
+                        .strokeBorder(isSelected ? tint : Theme.Colors.border, lineWidth: 1)
+                )
+        }
     }
 
     private func sheetScoreButton(label: String, value: Int) -> some View {
@@ -1243,57 +1663,84 @@ private struct HoleNotesSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
-                TextEditor(text: $notesDraft)
-                    .scrollContentBackground(.hidden)
-                    .padding(8)
-                    .background(Color(.systemGray6))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .frame(minHeight: 120)
+            ZStack {
+                Theme.Colors.backdrop.ignoresSafeArea()
+                VStack(spacing: 14) {
+                    TextEditor(text: $notesDraft)
+                        .scrollContentBackground(.hidden)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .tint(Theme.Colors.accent)
+                        .padding(10)
+                        .background(
+                            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                .fill(Theme.Colors.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                .strokeBorder(Theme.Colors.border, lineWidth: 1)
+                        )
+                        .frame(minHeight: 140)
 
-                // Voice-to-text row
-                HStack(spacing: 12) {
-                    Button {
-                        toggleDictation()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: isTranscribing ? "mic.fill" : "mic")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(isTranscribing ? .red : .accentColor)
-                            Text(isTranscribing ? "Stop" : "Dictate")
-                                .font(.subheadline.weight(.medium))
+                    HStack(spacing: 12) {
+                        Button { toggleDictation() } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: isTranscribing ? "mic.fill" : "mic")
+                                    .font(.system(size: 13, weight: .heavy))
+                                Text(isTranscribing ? "STOP" : "DICTATE")
+                                    .font(Theme.Font.caption(11))
+                                    .tracking(1)
+                            }
+                            .foregroundStyle(isTranscribing ? Theme.Colors.negative : Theme.Colors.accent)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(
+                                Capsule()
+                                    .fill(isTranscribing ? Theme.Colors.negative.opacity(0.15) : Theme.Colors.accentSoft)
+                            )
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(isTranscribing ? Theme.Colors.negative.opacity(0.4) : Theme.Colors.accent.opacity(0.4), lineWidth: 1)
+                            )
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(isTranscribing ? Color.red.opacity(0.15) : Color.accentColor.opacity(0.15))
-                        .clipShape(Capsule())
-                    }
 
-                    if isTranscribing && !speech.transcript.isEmpty {
-                        Text(speech.transcript)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        if isTranscribing && !speech.transcript.isEmpty {
+                            Text(speech.transcript)
+                                .font(Theme.Font.caption(11))
+                                .foregroundStyle(Theme.Colors.textMuted)
+                                .lineLimit(1)
+                        }
+
+                        Spacer()
                     }
 
                     Spacer()
                 }
-
-                Spacer()
+                .padding()
             }
-            .padding()
-            .navigationTitle("Hole \(holeNumber) Notes")
+            .navigationTitle("HOLE \(holeNumber) NOTES")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", action: onCancel)
+                    Button(action: onCancel) {
+                        Text("CANCEL")
+                            .font(Theme.Font.caption(12))
+                            .foregroundStyle(Theme.Colors.textMuted)
+                            .tracking(1)
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: onSave)
-                        .fontWeight(.semibold)
+                    Button(action: onSave) {
+                        Text("SAVE")
+                            .font(Theme.Font.caption(12))
+                            .foregroundStyle(Theme.Colors.accent)
+                            .tracking(1)
+                    }
                 }
             }
+            .toolbarBackground(Theme.Colors.surface, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
+        .preferredColorScheme(.dark)
     }
 
     private func toggleDictation() {

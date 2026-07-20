@@ -7,6 +7,10 @@ import CoreLocation
 struct DebugLocationBar: View {
     let locationService: LocationService
     let holeGps: HoleGps?
+    /// Course center — teleport target when the hole has no GPS data.
+    var courseLocation: CLLocationCoordinate2D? = nil
+    /// Where the player marked their shot (the aim target) — the "ball".
+    var ballTarget: CLLocationCoordinate2D? = nil
 
     @State private var expanded = false
     @State private var walkProgress: Double = 0 // 0 = tee, 1 = green
@@ -42,8 +46,9 @@ struct DebugLocationBar: View {
                     if let gps = holeGps {
                         // Quick teleport buttons
                         HStack(spacing: 6) {
-                            SimButton(label: "Tee", icon: "figure.golf") {
+                            SimButton(label: "Tee Box", icon: "figure.golf") {
                                 if let tee = gps.tee {
+                                    walkProgress = 0
                                     locationService.simulatedLocation = tee.coordinate
                                 }
                             }
@@ -61,10 +66,20 @@ struct DebugLocationBar: View {
 
                             SimButton(label: "Green", icon: "flag.fill") {
                                 if let green = gps.greenCenter {
+                                    walkProgress = 1
                                     locationService.simulatedLocation = green.coordinate
                                 }
                             }
                             .disabled(gps.greenCenter == nil)
+                        }
+
+                        // Drive the cart to the marked ball (aim target)
+                        if ballTarget != nil {
+                            SimButton(label: "Drive to Ball", icon: "car.fill") {
+                                if let ball = ballTarget {
+                                    locationService.simulateDrive(to: ball)
+                                }
+                            }
                         }
 
                         // Walk slider — smoothly interpolate tee to green
@@ -91,8 +106,13 @@ struct DebugLocationBar: View {
                             .font(.system(size: 10))
                             .foregroundStyle(.white.opacity(0.5))
 
-                        // Manual coordinate entry
                         HStack(spacing: 6) {
+                            // Still useful without hole GPS: stand on the course
+                            if let course = courseLocation {
+                                SimButton(label: "Course", icon: "flag.circle") {
+                                    locationService.simulatedLocation = course
+                                }
+                            }
                             SimButton(label: "Pebble Beach", icon: "mappin") {
                                 // Hole 7 tee at Pebble Beach
                                 locationService.simulatedLocation = CLLocationCoordinate2D(

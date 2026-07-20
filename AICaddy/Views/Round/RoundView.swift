@@ -26,6 +26,8 @@ struct RoundView: View {
     @State private var activeCourse: Course?
     @State private var currentHole = 1
     @State private var showScorecard = false
+    /// Where the player marked their last shot — sim "drive to ball" target.
+    @State private var lastAimTarget: CLLocationCoordinate2D?
 
     enum Phase { case search, setup, play, summary }
 
@@ -51,7 +53,17 @@ struct RoundView: View {
                             activeCourse = course
                             startRound(course: course, teeName: teeName)
                         },
-                        onSkip: { phase = .setup }
+                        onSkip: { phase = .setup },
+                        recentCourses: Array(savedCourses.prefix(5)),
+                        onRecentCourseSelected: { course in
+                            // Already saved — no re-fetch, keeps user-mapped holes
+                            activeCourse = course
+                            if course.tees.count == 1 {
+                                startRound(course: course, teeName: course.tees[0].name)
+                            } else {
+                                phase = .setup
+                            }
+                        }
                     )
                     .navigationTitle("New Round")
 
@@ -120,7 +132,9 @@ struct RoundView: View {
             // Resume an in-progress round if provided
             if let resumeRound, !resumeRound.isComplete {
                 round = resumeRound
-                currentHole = resumeRound.currentHole
+                // Clamp to a hole that actually exists in this round
+                let maxHole = resumeRound.holes.map(\.holeNumber).max() ?? 18
+                currentHole = min(max(1, resumeRound.currentHole), maxHole)
                 // Find the matching course for GPS data
                 activeCourse = savedCourses.first { $0.id == resumeRound.courseId }
                 phase = .play
@@ -164,7 +178,7 @@ struct RoundView: View {
                         totalScore: round.holes.reduce(0) { $0 + $1.strokes },
                         totalPar: round.holes.filter { $0.strokes > 0 }.reduce(0) { $0 + $1.par },
                         onNext: {
-                            if currentHole < 18 {
+                            if currentHole < lastHoleNumber {
                                 currentHole += 1
                                 self.round?.currentHole = currentHole
                             } else {
@@ -178,7 +192,7 @@ struct RoundView: View {
                             }
                         },
                         isFirst: currentHole == 1,
-                        isLast: currentHole == 18,
+                        isLast: currentHole == lastHoleNumber,
                         speech: speechService,
                         shotParser: shotParser,
                         onHome: { dismiss() },
@@ -193,15 +207,33 @@ struct RoundView: View {
                         temperature: weatherService.temperature,
                         suggestedFairway: suggestedFairway,
                         suggestedGIR: suggestedGIR,
-                        caddyTarget: currentSuggestedTarget
+                        caddyTarget: currentSuggestedTarget,
+                        courseLocation: courseCenterCoordinate,
+                        onAimTargetChanged: { lastAimTarget = $0 },
+                        onHoleMapped: { tee, green in
+                            saveHoleGps(holeNumber: currentHole, tee: tee, green: green)
+                        }
                     )
+                    #if DEBUG
+                    .overlay(alignment: .top) {
+                        DebugLocationBar(
+                            locationService: locationService,
+                            holeGps: currentHoleGps,
+                            courseLocation: courseCenterCoordinate,
+                            ballTarget: lastAimTarget ?? currentSuggestedTarget
+                        )
+                        .padding(.top, 60)
+                    }
+                    #endif
                 }
 
                 #if DEBUG
                 if showScorecard {
                     DebugLocationBar(
                         locationService: locationService,
-                        holeGps: currentHoleGps
+                        holeGps: currentHoleGps,
+                        courseLocation: courseCenterCoordinate,
+                        ballTarget: lastAimTarget
                     )
                 }
                 #endif
@@ -288,7 +320,25 @@ struct RoundView: View {
     }
 
     private var currentHoleGps: HoleGps? {
-        activeCourse?.tees.first?.holes.first { $0.holeNumber == currentHole }?.gps
+        // Prefer the tee data stored on the round itself (survives resume when
+        // the course lookup fails), then the active course.
+        (round?.courseTee ?? activeCourse?.tees.first)?
+            .holes.first { $0.holeNumber == currentHole }?.gps
+    }
+
+    /// Highest hole number in this round — don't hardcode 18.
+    private var lastHoleNumber: Int {
+        round?.holes.map(\.holeNumber).max() ?? 18
+    }
+
+    /// Course center for map framing / sim fallbacks. Uses the saved course
+    /// location, else the first mapped tee of the round.
+    private var courseCenterCoordinate: CLLocationCoordinate2D? {
+        if let loc = activeCourse?.location {
+            return loc.coordinate
+        }
+        let tee = round?.courseTee ?? activeCourse?.tees.first
+        return tee?.holes.compactMap { $0.gps?.tee }.first?.coordinate
     }
 
     /// Bearing in degrees from one coordinate to another
@@ -521,5 +571,55 @@ struct RoundView: View {
     private func finishRound() {
         round?.isComplete = true
         phase = .summary
+    }
+
+    /// Save a user-mapped tee/green for a hole OSM has no data for.
+    /// Persists to the course (future rounds) AND the round's stored tee
+    /// (this round), and fills in the hole yardage.
+    private func saveHoleGps(holeNumber: Int, tee: CLLocationCoordinate2D, green: CLLocationCoordinate2D) {
+        let newGps = HoleGps(
+            tee: GpsPoint(coordinate: tee),
+            greenCenter: GpsPoint(coordinate: green),
+            greenFront: nil,
+            greenBack: nil,
+            fairwayCenter: nil,
+            fairwayPath: nil,
+            hazards: nil
+        )
+        let yardage = LocationService.distanceYards(from: tee, to: green)
+
+        // Course model — persists for every future round here
+        if let course = activeCourse {
+            var tees = course.tees
+            for i in tees.indices {
+                if let h = tees[i].holes.firstIndex(where: { $0.holeNumber == holeNumber }) {
+                    tees[i].holes[h].gps = newGps
+                    if tees[i].holes[h].yardage == nil {
+                        tees[i].holes[h].yardage = yardage
+                    }
+                }
+            }
+            course.tees = tees
+        }
+
+        // Round's stored tee — what this round reads GPS from
+        if let r = round, var storedTee = r.courseTee {
+            if let h = storedTee.holes.firstIndex(where: { $0.holeNumber == holeNumber }) {
+                storedTee.holes[h].gps = newGps
+                if storedTee.holes[h].yardage == nil {
+                    storedTee.holes[h].yardage = yardage
+                }
+                r.courseTee = storedTee
+            }
+        }
+
+        // The scorecard's hole yardage
+        if let r = round {
+            var holes = r.holes
+            if let h = holes.firstIndex(where: { $0.holeNumber == holeNumber }), holes[h].yardage == nil {
+                holes[h].yardage = yardage
+                r.holes = holes
+            }
+        }
     }
 }

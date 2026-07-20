@@ -7,6 +7,9 @@ struct CourseSearchView: View {
     let onCourseLoaded: (Course) -> Void
     let onCourseWithTeeLoaded: ((Course, String) -> Void)?
     let onSkip: () -> Void
+    /// Previously-played courses — one tap to start, no network needed.
+    let recentCourses: [Course]
+    let onRecentCourseSelected: ((Course) -> Void)?
 
     @State private var query = ""
     @State private var results: [CourseSearchResult] = []
@@ -19,12 +22,16 @@ struct CourseSearchView: View {
     init(courseSearch: CourseSearchService, locationService: LocationService,
          onCourseLoaded: @escaping (Course) -> Void,
          onCourseWithTeeLoaded: ((Course, String) -> Void)? = nil,
-         onSkip: @escaping () -> Void) {
+         onSkip: @escaping () -> Void,
+         recentCourses: [Course] = [],
+         onRecentCourseSelected: ((Course) -> Void)? = nil) {
         self.courseSearch = courseSearch
         self.locationService = locationService
         self.onCourseLoaded = onCourseLoaded
         self.onCourseWithTeeLoaded = onCourseWithTeeLoaded
         self.onSkip = onSkip
+        self.recentCourses = recentCourses
+        self.onRecentCourseSelected = onRecentCourseSelected
     }
 
     var body: some View {
@@ -103,6 +110,52 @@ struct CourseSearchView: View {
                         )
                     }
                     .disabled(searching)
+
+                    // Recent courses — play again without searching
+                    if !recentCourses.isEmpty && results.isEmpty && !searching {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("RECENT COURSES")
+                                .font(Theme.Font.caption(10))
+                                .foregroundStyle(Theme.Colors.textMuted)
+                                .tracking(1)
+
+                            ForEach(recentCourses, id: \.id) { course in
+                                Button { onRecentCourseSelected?(course) } label: {
+                                    HStack {
+                                        Image(systemName: "clock.arrow.circlepath")
+                                            .font(.system(size: 14, weight: .heavy))
+                                            .foregroundStyle(Theme.Colors.accent)
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(course.name.uppercased())
+                                                .font(Theme.Font.title(14))
+                                                .foregroundStyle(Theme.Colors.textPrimary)
+                                                .tracking(0.5)
+                                            if let city = course.city {
+                                                Text(city.uppercased())
+                                                    .font(Theme.Font.caption(10))
+                                                    .foregroundStyle(Theme.Colors.textMuted)
+                                                    .tracking(0.5)
+                                            }
+                                        }
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 12, weight: .heavy))
+                                            .foregroundStyle(Theme.Colors.textMuted)
+                                    }
+                                    .padding(14)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                            .fill(Theme.Colors.surface)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                            .strokeBorder(Theme.Colors.accent.opacity(0.25), lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
 
                     if !results.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {

@@ -12,7 +12,12 @@ struct CourseSearchResult: Identifiable {
 /// Searches for golf courses via OpenStreetMap (Nominatim + Overpass APIs)
 final class CourseSearchService {
     private let nominatimBase = "https://nominatim.openstreetmap.org"
-    private let overpassBase = "https://overpass-api.de/api/interpreter"
+    /// Overpass is a free, per-IP rate-limited service — one busy mirror must
+    /// not kill course search, so fall through the list on failure.
+    private let overpassMirrors = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+    ]
     private let userAgent = "AICaddy/1.0"
 
     var isConfigured: Bool { true }
@@ -57,37 +62,28 @@ final class CourseSearchService {
         let osmType = String(parts[0])
         let osmId = String(parts[1])
 
-        // Fetch the course boundary and all golf-related features within it
-        let query: String
-        if osmType == "relation" {
-            query = """
-            [out:json][timeout:25];
-            rel(\(osmId));
-            out body;
-            >>;
-            out skel qt;
-            rel(\(osmId));
-            map_to_area->.course;
-            (
-              way["golf"](area.course);
-              node["golf"](area.course);
-              way["natural"="water"](area.course);
-              way["landuse"="reservoir"](area.course);
-            );
-            out body;
-            >>;
-            out skel qt;
-            """
-        } else {
-            // For way-based courses, search within a bounding box around the course
-            query = """
-            [out:json][timeout:25];
-            \(osmType)(\(osmId));
-            out body;
-            >>;
-            out skel qt;
-            """
-        }
+        // Fetch the course element plus all golf features near its geometry.
+        // `around.course` works for ways, relations AND nodes — the old
+        // way-branch only fetched the course boundary itself, so way-mapped
+        // courses (most of them) loaded with ZERO hole data and the map fell
+        // back to the user's location.
+        let query = """
+        [out:json][timeout:25];
+        \(osmType)(\(osmId))->.course;
+        .course out center tags;
+        .course out body;
+        .course >;
+        out skel qt;
+        (
+          way["golf"](around.course:100);
+          node["golf"](around.course:100);
+          way["natural"="water"](around.course:100);
+          way["landuse"="reservoir"](around.course:100);
+        );
+        out body;
+        >>;
+        out skel qt;
+        """
 
         let data = try await overpassQuery(query)
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
@@ -111,16 +107,12 @@ final class CourseSearchService {
         // Parse golf features into hole data
         let holeDataList = parseHoles(from: elements, courseLocation: location)
 
-        // Build a single default tee (OSM doesn't have rating/slope data)
-        var tees: [CourseTee]
-        if holeDataList.isEmpty {
-            // No hole data found — create 18 blank holes
-            let blankHoles = (1...18).map { CourseHoleData(holeNumber: $0, par: 4) }
-            tees = [CourseTee(name: "Default", holes: blankHoles)]
-        } else {
-            tees = [CourseTee(name: "Default", holes: holeDataList)]
-        }
+        // Fill gaps so every hole 1...N exists — a round that lands on an
+        // unmapped hole number renders a blank screen. Empty data becomes a
+        // standard 18 blank holes.
+        let normalizedHoles = Self.normalizedHoles(holeDataList)
 
+        let tees = [CourseTee(name: "Default", holes: normalizedHoles)]
         return (tees, courseName, city, state, location)
     }
 
@@ -232,6 +224,18 @@ final class CourseSearchService {
             switch golfTag {
             case "hole":
                 if let num = holeNumber {
+                    // A neighboring course's holes can land inside the fetch
+                    // buffer — if this ref is already populated, keep whichever
+                    // hole way sits nearer the course center.
+                    if let existingTee = holeMap[num]?.tee, let courseLoc = courseLocation,
+                       let newTee = (el["nodes"] as? [Int]).flatMap({ $0.first.flatMap { nodeCoords[$0] } }) {
+                        let existingDist = LocationService.distanceYards(
+                            from: existingTee.coordinate, to: courseLoc.coordinate)
+                        let newDist = LocationService.distanceYards(
+                            from: newTee.coordinate, to: courseLoc.coordinate)
+                        if newDist >= existingDist { break }
+                        holeMap[num] = HoleFeatures()
+                    }
                     if holeMap[num] == nil { holeMap[num] = HoleFeatures() }
                     if let par = tags["par"].flatMap({ Int($0) }) { holeMap[num]?.par = par }
                     if let hcp = tags["handicap"].flatMap({ Int($0) }) { holeMap[num]?.handicap = hcp }
@@ -367,6 +371,23 @@ final class CourseSearchService {
         return nil
     }
 
+    /// Fill gaps in partially-mapped courses so every hole 1...N is playable.
+    /// A well-mapped nine (5+ holes, none past 9) stays 9; sparse data
+    /// defaults to 18 — capping a real 18-hole course would lose the back nine.
+    static func normalizedHoles(_ holes: [CourseHoleData]) -> [CourseHoleData] {
+        guard let maxNumber = holes.map(\.holeNumber).max() else {
+            return (1...18).map { CourseHoleData(holeNumber: $0, par: 4) }
+        }
+        let looksLikeNine = maxNumber <= 9 && holes.count >= 5
+        let target = looksLikeNine ? 9 : max(maxNumber, 18)
+
+        var byNumber: [Int: CourseHoleData] = [:]
+        for hole in holes where (1...36).contains(hole.holeNumber) {
+            byNumber[hole.holeNumber] = hole
+        }
+        return (1...target).map { byNumber[$0] ?? CourseHoleData(holeNumber: $0, par: 4) }
+    }
+
     private func yardageFromGps(tee: GpsPoint?, green: GpsPoint?) -> Int? {
         guard let tee, let green else { return nil }
         let teeLocation = CLLocation(latitude: tee.lat, longitude: tee.lng)
@@ -378,14 +399,41 @@ final class CourseSearchService {
     // MARK: - Networking
 
     private func overpassQuery(_ query: String) async throws -> Data {
-        var request = URLRequest(url: URL(string: overpassBase)!)
+        var lastError: Error = CourseSearchError.apiError
+        for (index, mirror) in overpassMirrors.enumerated() {
+            do {
+                return try await overpassRequest(base: mirror, query: query)
+            } catch {
+                lastError = error
+                // Give the next mirror a beat — most failures are rate limits
+                if index + 1 < overpassMirrors.count {
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                }
+            }
+        }
+        throw lastError
+    }
+
+    private func overpassRequest(base: String, query: String) async throws -> Data {
+        var request = URLRequest(url: URL(string: base)!)
         request.httpMethod = "POST"
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = "data=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")".data(using: .utf8)
+        request.timeoutInterval = 30
+
+        // Strict form encoding — .urlQueryAllowed leaves characters like '+'
+        // and '&' unescaped, which corrupts the body.
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+        request.httpBody = "data=\(encoded)".data(using: .utf8)
+
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            throw CourseSearchError.apiError
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else {
+            // 429/504 = rate limited or overloaded — worth telling the user
+            // it's temporary rather than "failed"
+            throw (status == 429 || status == 504) ? CourseSearchError.busy : CourseSearchError.apiError
         }
         return data
     }
@@ -403,11 +451,13 @@ final class CourseSearchService {
 
 enum CourseSearchError: LocalizedError {
     case apiError
+    case busy
     case invalidResponse
 
     var errorDescription: String? {
         switch self {
-        case .apiError: return "Course search failed"
+        case .apiError: return "Course search failed — check your connection"
+        case .busy: return "Course data service is busy — try again in a minute"
         case .invalidResponse: return "Invalid response from course API"
         }
     }
