@@ -102,10 +102,10 @@ final class CourseSearchService {
         let state = tags["addr:state"]
 
         // Get course center point
-        let location = extractCenter(from: courseElement, elements: elements)
+        let location = Self.extractCenter(from: courseElement, elements: elements)
 
         // Parse golf features into hole data
-        let holeDataList = parseHoles(from: elements, courseLocation: location)
+        let holeDataList = Self.parseHoles(from: elements, courseLocation: location)
 
         // Fill gaps so every hole 1...N exists — a round that lands on an
         // unmapped hole number renders a blank screen. Empty data becomes a
@@ -185,7 +185,8 @@ final class CourseSearchService {
         )
     }
 
-    private func parseHoles(from elements: [[String: Any]], courseLocation: GpsPoint?) -> [CourseHoleData] {
+    /// Internal + static so the test suite can drive it with recorded responses.
+    static func parseHoles(from elements: [[String: Any]], courseLocation: GpsPoint?) -> [CourseHoleData] {
         // Collect all node coordinates for resolving way geometries
         var nodeCoords: [Int: GpsPoint] = [:]
         for el in elements where el["type"] as? String == "node" {
@@ -326,7 +327,7 @@ final class CourseSearchService {
         }
     }
 
-    private func elementCentroid(_ element: [String: Any], nodeCoords: [Int: GpsPoint]) -> GpsPoint? {
+    private static func elementCentroid(_ element: [String: Any], nodeCoords: [Int: GpsPoint]) -> GpsPoint? {
         if let lat = element["lat"] as? Double, let lng = element["lon"] as? Double {
             return GpsPoint(lat: lat, lng: lng)
         }
@@ -345,7 +346,7 @@ final class CourseSearchService {
         return nil
     }
 
-    private func extractCenter(from element: [String: Any]?, elements: [[String: Any]]) -> GpsPoint? {
+    private static func extractCenter(from element: [String: Any]?, elements: [[String: Any]]) -> GpsPoint? {
         guard let element else { return nil }
         if let lat = element["lat"] as? Double, let lng = element["lon"] as? Double {
             return GpsPoint(lat: lat, lng: lng)
@@ -388,7 +389,7 @@ final class CourseSearchService {
         return (1...target).map { byNumber[$0] ?? CourseHoleData(holeNumber: $0, par: 4) }
     }
 
-    private func yardageFromGps(tee: GpsPoint?, green: GpsPoint?) -> Int? {
+    private static func yardageFromGps(tee: GpsPoint?, green: GpsPoint?) -> Int? {
         guard let tee, let green else { return nil }
         let teeLocation = CLLocation(latitude: tee.lat, longitude: tee.lng)
         let greenLocation = CLLocation(latitude: green.lat, longitude: green.lng)

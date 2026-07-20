@@ -366,9 +366,12 @@ enum AdvancedStatsCalculator {
     }
 
     private static func buildHandicapTrend(rounds: [Round]) -> [Double] {
-        var trend: [Double] = []
         let sorted = rounds.sorted { $0.date < $1.date }
+        // Fewer than 3 rounds: 2..<count is an invalid range (crashes) and a
+        // handicap can't be computed anyway.
+        guard sorted.count >= 3 else { return [] }
 
+        var trend: [Double] = []
         for i in 2..<sorted.count {
             let subset = Array(sorted.prefix(i + 1))
             let hcRounds = subset.compactMap { HandicapRound.fromRound($0) }

@@ -164,50 +164,51 @@ enum StatsCalculator {
         )
     }
 
-    /// Auto-derive GIR, fairway hit, up-and-down from shot data
+    /// Auto-derive GIR, fairway hit, up-and-down from shot data.
+    /// Putts/fairway/GIR are fill-only (the user can set them manually);
+    /// up-and-down and sand save are always recomputed — no UI sets them
+    /// directly, and fill-only left them stale after score edits.
     static func deriveHoleStats(_ hole: inout HoleScore) {
         let shots = hole.shots
-        guard !shots.isEmpty else { return }
 
-        // Auto-detect putts
-        let puttCount = shots.filter(\.isPutt).count
-        if puttCount > 0 && hole.putts == nil {
-            hole.putts = puttCount
-        }
+        if !shots.isEmpty {
+            // Auto-detect putts
+            let puttCount = shots.filter(\.isPutt).count
+            if puttCount > 0 && hole.putts == nil {
+                hole.putts = puttCount
+            }
 
-        // Auto-detect fairway hit (first shot on par 4+)
-        if hole.par >= 4 && hole.fairwayHit == nil {
-            if let teeShot = shots.first(where: { $0.shotNumber == 1 }), let result = teeShot.result {
-                hole.fairwayHit = result == .fairway
+            // Auto-detect fairway hit (first shot on par 4+)
+            if hole.par >= 4 && hole.fairwayHit == nil {
+                if let teeShot = shots.first(where: { $0.shotNumber == 1 }), let result = teeShot.result {
+                    hole.fairwayHit = result == .fairway
+                }
+            }
+
+            // Auto-detect GIR
+            if hole.greenInRegulation == nil {
+                let girTarget = hole.par - 2
+                let hitGreen = shots.first { s in
+                    (s.result == .green || s.result == .holed) && s.shotNumber <= girTarget
+                }
+                if hitGreen != nil {
+                    hole.greenInRegulation = true
+                } else if shots.count >= girTarget {
+                    let anyGreen = shots.filter { $0.shotNumber <= girTarget }
+                        .contains { $0.result == .green || $0.result == .holed }
+                    if !anyGreen { hole.greenInRegulation = false }
+                }
             }
         }
 
-        // Auto-detect GIR
-        if hole.greenInRegulation == nil {
-            let girTarget = hole.par - 2
-            let hitGreen = shots.first { s in
-                (s.result == .green || s.result == .holed) && s.shotNumber <= girTarget
-            }
-            if hitGreen != nil {
-                hole.greenInRegulation = true
-            } else if shots.count >= girTarget {
-                let anyGreen = shots.filter { $0.shotNumber <= girTarget }
-                    .contains { $0.result == .green || $0.result == .holed }
-                if !anyGreen { hole.greenInRegulation = false }
-            }
-        }
-
-        // Auto-detect up-and-down
-        if hole.greenInRegulation == false && hole.upAndDown == nil && hole.strokes > 0 {
+        // Up-and-down / sand save: recompute from the current score every time.
+        if hole.greenInRegulation == false && hole.strokes > 0 {
             hole.upAndDown = hole.strokes <= hole.par
-        }
-
-        // Auto-detect sand save
-        if hole.greenInRegulation == false && hole.sandSave == nil {
             let hitBunker = shots.contains { $0.result == .bunker && !$0.isPutt }
-            if hitBunker && hole.strokes > 0 {
-                hole.sandSave = hole.strokes <= hole.par
-            }
+            hole.sandSave = hitBunker ? (hole.strokes <= hole.par) : nil
+        } else {
+            hole.upAndDown = nil
+            hole.sandSave = nil
         }
     }
 }

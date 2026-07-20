@@ -122,7 +122,7 @@ final class ShotParserService {
     // Expanded aliases — speech recognition often returns number words, plurals, etc.
     private static let clubAliases: [(String, Club)] = [
         // Driver
-        ("driver", .driver), ("drive", .driver), ("big dog", .driver), ("big stick", .driver),
+        ("driver", .driver), ("drive", .driver), ("drove", .driver), ("big dog", .driver), ("big stick", .driver),
         // Woods
         ("3 wood", .wood3), ("3wood", .wood3), ("three wood", .wood3),
         ("5 wood", .wood5), ("5wood", .wood5), ("five wood", .wood5),
@@ -184,6 +184,18 @@ final class ShotParserService {
         ("jarred it", .holed), ("drained it", .holed),
     ]
 
+    // Longest aliases first so specific phrases win over their substrings
+    // (e.g. "on the green" must beat "sand" for "sand wedge on the green").
+    private static let clubAliasesByLength = clubAliases.sorted { $0.0.count > $1.0.count }
+    private static let resultAliasesByLength = resultAliases.sorted { $0.0.count > $1.0.count }
+
+    /// Whole-word alias match. Plain `contains` corrupted data: the "52"/"56"/"60"
+    /// wedge aliases matched inside distances ("152 yards" became a gap wedge).
+    private static func aliasRange(_ alias: String, in text: String) -> Range<String.Index>? {
+        let pattern = "\\b" + NSRegularExpression.escapedPattern(for: alias) + "\\b"
+        return text.range(of: pattern, options: .regularExpression)
+    }
+
     func localParse(input: String, par: Int, currentShotNumber: Int) -> ParsedShotInput {
         let lower = input.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         var result = ParsedShotInput(shots: [], confidence: 0.6)
@@ -196,13 +208,20 @@ final class ShotParserService {
             return result
         }
 
-        // Putts only: "2 putts", "one putt", "3 putt"
-        if let match = lower.range(of: #"(\d|one|two|three|four)\s*putts?"#, options: .regularExpression),
-           lower.count < 20 {
-            let puttStr = String(lower[match])
-            result.putts = parseNumberWord(puttStr)
-            result.confidence = 0.9
-            return result
+        // Putts only: "2 putts", "one putt", "3 putt" — but only when the input
+        // is nothing BUT putts. Previously "par with 2 putts" landed here and the
+        // score was silently dropped.
+        if let match = lower.range(of: #"(\d|one|two|three|four)\s*putts?"#, options: .regularExpression) {
+            let remainder = lower
+                .replacingOccurrences(of: #"(\d|one|two|three|four)\s*putts?"#, with: " ", options: .regularExpression)
+                .replacingOccurrences(of: #"[,.!?]"#, with: " ", options: .regularExpression)
+                .replacingOccurrences(of: #"\b(i|had|made|just|only|took|with|a|an|the|and|then)\b"#, with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+            if remainder.isEmpty {
+                result.putts = parseNumberWord(String(lower[match]))
+                result.confidence = 0.9
+                return result
+            }
         }
 
         // "chip and a putt" / "up and down" patterns
@@ -248,10 +267,14 @@ final class ShotParserService {
             }
         }
 
-        // Fairway detection
-        if lower.contains("fairway") { result.fairwayHit = true }
-        if lower.contains("missed fairway") || lower.contains("miss fairway") ||
-           lower.contains("missed the fairway") { result.fairwayHit = false }
+        // Fairway detection — FIR is a tee-shot stat. Only set it when this
+        // input describes the first shot; otherwise a par-5 layup that finds
+        // the fairway would incorrectly mark the fairway as hit.
+        if currentShotNumber == 1 {
+            if lower.contains("fairway") { result.fairwayHit = true }
+            if lower.contains("missed fairway") || lower.contains("miss fairway") ||
+               lower.contains("missed the fairway") { result.fairwayHit = false }
+        }
 
         // GIR detection
         if lower.contains("gir") || lower.contains("green in regulation") ||
@@ -287,23 +310,37 @@ final class ShotParserService {
         var shotResult: ShotResult?
         var matched = false
 
-        for (alias, c) in Self.clubAliases {
-            if seg.contains(alias) { club = c; matched = true; break }
+        // Match the club first and strip its text, so numeric aliases ("52",
+        // "56", "60") and words like "sand wedge" can't also be read as a
+        // distance or a result ("sand" → bunker).
+        var remainder = seg
+        for (alias, c) in Self.clubAliasesByLength {
+            if let range = Self.aliasRange(alias, in: remainder) {
+                club = c
+                matched = true
+                remainder.replaceSubrange(range, with: " ")
+                break
+            }
         }
 
-        if let match = seg.range(of: #"(\d{2,3})\s*(?:yards?|yds?)?"#, options: .regularExpression) {
-            let numStr = seg[match].filter(\.isNumber)
+        if let match = remainder.range(of: #"\b(\d{2,3})\b\s*(?:yards?|yds?)?"#, options: .regularExpression) {
+            let numStr = remainder[match].filter(\.isNumber)
             dist = Int(numStr)
             matched = true
         }
 
-        for (alias, r) in Self.resultAliases {
-            if seg.contains(alias) { shotResult = r; matched = true; break }
+        for (alias, r) in Self.resultAliasesByLength {
+            if Self.aliasRange(alias, in: remainder) != nil {
+                shotResult = r
+                matched = true
+                break
+            }
         }
 
         guard matched else { return nil }
 
-        let isPenalty = seg.contains("penalty") || seg.contains("water") || seg.contains("ob") || seg.contains("out of bounds")
+        let isPenalty = shotResult == .water || shotResult == .ob
+            || Self.aliasRange("penalty", in: seg) != nil
 
         return Shot(
             shotNumber: shotNumber,
@@ -316,13 +353,21 @@ final class ShotParserService {
     }
 
     private func parseSimpleScore(_ input: String, par: Int) -> (strokes: Int, putts: Int?)? {
+        // Normalize punctuation so "par, 2 putts" isn't rejected for the comma.
+        let cleaned = input
+            .replacingOccurrences(of: #"[,.!?]"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+
         var putts: Int?
-        if let match = input.range(of: #"(\d)\s*putts?"#, options: .regularExpression) {
-            let digit = input[match].first { $0.isNumber }
-            putts = digit.flatMap { Int(String($0)) }
+        if let match = cleaned.range(of: #"(\d|one|two|three|four)\s*putts?"#, options: .regularExpression) {
+            putts = parseNumberWord(String(cleaned[match]))
         }
 
-        let scorePart = input.replacingOccurrences(of: #"\d\s*putts?"#, with: "", options: .regularExpression)
+        let scorePart = cleaned
+            .replacingOccurrences(of: #"(\d|one|two|three|four)\s*putts?"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"\b(with|and)\b"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
 
         let strokes: Int?

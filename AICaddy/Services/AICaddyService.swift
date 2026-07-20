@@ -139,13 +139,12 @@ final class AICaddyService {
     // MARK: - Predictive Scoring
 
     /// Predict final score based on pace through current hole
-    func predictedScore(holesPlayed: [HoleScore], totalPar: Int) -> ScorePrediction? {
+    func predictedScore(holesPlayed: [HoleScore], totalPar: Int, totalHoles: Int = 18) -> ScorePrediction? {
         let played = holesPlayed.filter { $0.strokes > 0 }
         guard played.count >= 4 else { return nil }  // need at least 4 holes
 
         let playedStrokes = played.reduce(0) { $0 + $1.strokes }
-        let playedPar = played.reduce(0) { $0 + $1.par }
-        let remaining = 18 - played.count
+        let remaining = max(0, totalHoles - played.count)
 
         // Simple pace projection
         let avgPerHole = Double(playedStrokes) / Double(played.count)

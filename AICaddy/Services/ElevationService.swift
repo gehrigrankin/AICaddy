@@ -31,20 +31,12 @@ final class ElevationService {
         }
     }
 
-    /// Fetch elevation data for a coordinate using Apple Maps
+    /// There is no offline elevation lookup for an arbitrary coordinate —
+    /// a CLLocation constructed from a coordinate always has altitude 0 (the
+    /// old implementation returned a bogus 0 for every coordinate). Elevation
+    /// comes from live GPS fixes via `updateElevation(from:)`.
     func fetchElevation(for coordinate: CLLocationCoordinate2D) async -> Double? {
-        // Use CLGeocoder for a rough elevation estimate
-        let geocoder = CLGeocoder()
-        let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-
-        do {
-            _ = try await geocoder.reverseGeocodeLocation(location)
-            // CLPlacemark doesn't directly provide elevation
-            // We rely on CLLocation's altitude from the GPS instead
-            return location.altitude
-        } catch {
-            return nil
-        }
+        nil
     }
 
     /// Get elevation description
