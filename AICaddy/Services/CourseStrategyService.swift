@@ -99,7 +99,7 @@ final class CourseStrategyService {
         }
 
         // Place target along the fairway centerline, not the straight tee-to-green line
-        let targetCoord = interpolateAlongFairway(
+        let targetCoord = Self.interpolateAlongFairway(
             from: userLocation,
             holeGps: holeGps,
             targetDistance: targetDistFromUser
@@ -215,7 +215,7 @@ final class CourseStrategyService {
 
     /// Walk along the hole's fairway path (tee → waypoints → green) and find
     /// the coordinate at the given distance from the start point.
-    private func interpolateAlongFairway(
+    static func interpolateAlongFairway(
         from start: CLLocationCoordinate2D,
         holeGps: HoleGps,
         targetDistance: Int
@@ -255,7 +255,7 @@ final class CourseStrategyService {
         return path.last!
     }
 
-    private func interpolateCoordinate(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, distanceYards: Int, totalDistanceYards: Int) -> CLLocationCoordinate2D {
+    static func interpolateCoordinate(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, distanceYards: Int, totalDistanceYards: Int) -> CLLocationCoordinate2D {
         guard totalDistanceYards > 0 else { return from }
         let fraction = min(1.0, Double(distanceYards) / Double(totalDistanceYards))
         let lat = from.latitude + (to.latitude - from.latitude) * fraction

@@ -18,163 +18,188 @@ struct RoundSummaryView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Header
-                VStack(spacing: 4) {
-                    Text("Round Summary")
-                        .font(.title2.bold())
-                    Text("\(round.courseName) · \(round.teeName)")
-                        .foregroundStyle(.secondary)
-                    Text(round.date.formatted(date: .abbreviated, time: .omitted))
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
+        ZStack {
+            LinearGradient(
+                colors: [Theme.Colors.backdrop, Theme.Colors.surfaceDeep, Theme.Colors.backdrop],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-                // Big score
-                VStack(spacing: 4) {
-                    Text("\(stats.totalStrokes)")
-                        .font(.system(size: 64, weight: .bold))
-                    ScoreText(scoreToPar: stats.scoreToPar)
-                        .font(.title.bold())
-                    Text("Front \(stats.frontNine) · Back \(stats.backNine)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+            ScrollView {
+                VStack(spacing: 20) {
+                    VStack(spacing: 6) {
+                        Text("ROUND COMPLETE")
+                            .font(Theme.Font.caption(11))
+                            .foregroundStyle(Theme.Colors.accent)
+                            .tracking(2)
+                        Text(round.courseName.uppercased())
+                            .font(Theme.Font.display(20))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .tracking(1)
+                        Text("\(round.teeName.uppercased()) · \(round.date.formatted(date: .abbreviated, time: .omitted).uppercased())")
+                            .font(Theme.Font.caption(10))
+                            .foregroundStyle(Theme.Colors.textMuted)
+                            .tracking(0.5)
+                    }
+                    .padding(.top, 12)
 
-                // Key stats
-                LazyVGrid(columns: [.init(), .init(), .init()], spacing: 8) {
-                    StatCard(label: "Putts", value: "\(stats.totalPutts)", sub: String(format: "%.1f/hole", stats.puttsPerHole))
-                    StatCard(label: "GIR", value: "\(stats.greensInRegulation)/\(stats.girHoles)",
-                             sub: String(format: "%.0f%%", stats.greensInRegulationPct))
-                    StatCard(label: "Fairways", value: "\(stats.fairwaysHit)/\(stats.fairwayHoles)",
-                             sub: String(format: "%.0f%%", stats.fairwaysPct))
-                }
+                    VStack(spacing: 4) {
+                        Text("\(stats.totalStrokes)")
+                            .font(Theme.Font.display(72))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        ScoreText(scoreToPar: stats.scoreToPar)
+                            .font(Theme.Font.display(22))
+                        Text("FRONT \(stats.frontNine) · BACK \(stats.backNine)")
+                            .font(Theme.Font.caption(10))
+                            .foregroundStyle(Theme.Colors.textMuted)
+                            .tracking(1)
+                    }
+                    .padding(.vertical, 4)
 
-                // Scoring distribution
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Scoring").font(.subheadline.bold()).foregroundStyle(.secondary)
+                    LazyVGrid(columns: [.init(), .init(), .init()], spacing: 8) {
+                        StatCard(label: "PUTTS", value: "\(stats.totalPutts)", sub: String(format: "%.1f/HOLE", stats.puttsPerHole))
+                        StatCard(label: "GIR", value: "\(stats.greensInRegulation)/\(stats.girHoles)",
+                                 sub: String(format: "%.0f%%", stats.greensInRegulationPct))
+                        StatCard(label: "FAIRWAYS", value: "\(stats.fairwaysHit)/\(stats.fairwayHoles)",
+                                 sub: String(format: "%.0f%%", stats.fairwaysPct))
+                    }
+
+                    sectionHeader("SCORING")
                     HStack(spacing: 4) {
-                        ScoringPill(label: "Eagles", count: stats.eagles, color: .yellow)
-                        ScoringPill(label: "Birdies", count: stats.birdies, color: .red)
-                        ScoringPill(label: "Pars", count: stats.pars, color: .green)
-                        ScoringPill(label: "Bogeys", count: stats.bogeys, color: .cyan)
-                        ScoringPill(label: "Dbl", count: stats.doubleBogeys, color: .blue)
-                        ScoringPill(label: "3+", count: stats.triplePlus, color: .gray)
+                        ScoringPill(label: "EAGLES", count: stats.eagles, color: Theme.Colors.accent)
+                        ScoringPill(label: "BIRDIES", count: stats.birdies, color: Theme.Colors.positive)
+                        ScoringPill(label: "PARS", count: stats.pars, color: Theme.Colors.textPrimary)
+                        ScoringPill(label: "BOGEYS", count: stats.bogeys, color: Theme.Colors.textSecondary)
+                        ScoringPill(label: "DBL", count: stats.doubleBogeys, color: Theme.Colors.negative)
+                        ScoringPill(label: "3+", count: stats.triplePlus, color: Theme.Colors.textMuted)
                     }
-                }
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                            .fill(Theme.Colors.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                            .strokeBorder(Theme.Colors.border, lineWidth: 1)
+                    )
 
-                // What Cost You
-                WhatCostYouCompactCard(holes: round.holes)
+                    WhatCostYouCompactCard(holes: round.holes)
 
-                // Detailed stats
-                LazyVGrid(columns: [.init(), .init()], spacing: 8) {
-                    StatCard(label: "1-Putts", value: "\(stats.oneputts)")
-                    StatCard(label: "3-Putts", value: "\(stats.threeputts)")
-                    if stats.upAndDownAttempts > 0 {
-                        StatCard(label: "Up & Down", value: String(format: "%.0f%%", stats.upAndDownPct),
-                                 sub: "\(stats.upAndDowns)/\(stats.upAndDownAttempts)")
-                    }
-                    if stats.sandSaveAttempts > 0 {
-                        StatCard(label: "Sand Saves", value: String(format: "%.0f%%", stats.sandSavePct),
-                                 sub: "\(stats.sandSaves)/\(stats.sandSaveAttempts)")
-                    }
-                    if stats.scramblingPct > 0 {
-                        StatCard(label: "Scrambling", value: String(format: "%.0f%%", stats.scramblingPct))
-                    }
-                    if stats.avgDrivingDistance > 0 {
-                        StatCard(label: "Avg Drive", value: "\(stats.avgDrivingDistance)y",
-                                 sub: "\(stats.driveCount) drives")
-                    }
-                }
-
-                // Par performance
-                if stats.par3Avg > 0 || stats.par4Avg > 0 || stats.par5Avg > 0 {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Avg by Par").font(.subheadline.bold()).foregroundStyle(.secondary)
-                        LazyVGrid(columns: [.init(), .init(), .init()], spacing: 8) {
-                            if stats.par3Avg > 0 { StatCard(label: "Par 3", value: String(format: "%.1f", stats.par3Avg)) }
-                            if stats.par4Avg > 0 { StatCard(label: "Par 4", value: String(format: "%.1f", stats.par4Avg)) }
-                            if stats.par5Avg > 0 { StatCard(label: "Par 5", value: String(format: "%.1f", stats.par5Avg)) }
+                    LazyVGrid(columns: [.init(), .init()], spacing: 8) {
+                        StatCard(label: "1-PUTTS", value: "\(stats.oneputts)")
+                        StatCard(label: "3-PUTTS", value: "\(stats.threeputts)")
+                        if stats.upAndDownAttempts > 0 {
+                            StatCard(label: "UP & DOWN", value: String(format: "%.0f%%", stats.upAndDownPct),
+                                     sub: "\(stats.upAndDowns)/\(stats.upAndDownAttempts)")
+                        }
+                        if stats.sandSaveAttempts > 0 {
+                            StatCard(label: "SAND SAVES", value: String(format: "%.0f%%", stats.sandSavePct),
+                                     sub: "\(stats.sandSaves)/\(stats.sandSaveAttempts)")
+                        }
+                        if stats.scramblingPct > 0 {
+                            StatCard(label: "SCRAMBLING", value: String(format: "%.0f%%", stats.scramblingPct))
+                        }
+                        if stats.avgDrivingDistance > 0 {
+                            StatCard(label: "AVG DRIVE", value: "\(stats.avgDrivingDistance)Y",
+                                     sub: "\(stats.driveCount) DRIVES")
                         }
                     }
-                }
 
-                // Club distances
-                if !stats.clubDistances.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Club Distances").font(.subheadline.bold()).foregroundStyle(.secondary)
+                    if stats.par3Avg > 0 || stats.par4Avg > 0 || stats.par5Avg > 0 {
+                        sectionHeader("AVG BY PAR")
+                        LazyVGrid(columns: [.init(), .init(), .init()], spacing: 8) {
+                            if stats.par3Avg > 0 { StatCard(label: "PAR 3", value: String(format: "%.1f", stats.par3Avg)) }
+                            if stats.par4Avg > 0 { StatCard(label: "PAR 4", value: String(format: "%.1f", stats.par4Avg)) }
+                            if stats.par5Avg > 0 { StatCard(label: "PAR 5", value: String(format: "%.1f", stats.par5Avg)) }
+                        }
+                    }
+
+                    if !stats.clubDistances.isEmpty {
+                        sectionHeader("CLUB DISTANCES")
                         LazyVGrid(columns: [.init(), .init()], spacing: 8) {
                             ForEach(
                                 stats.clubDistances.sorted { $0.value.avg > $1.value.avg },
                                 id: \.key
                             ) { club, data in
-                                StatCard(label: club.displayName, value: "\(data.avg)y", sub: "\(data.count) shots")
+                                StatCard(label: club.displayName.uppercased(), value: "\(data.avg)Y", sub: "\(data.count) SHOTS")
                             }
                         }
                     }
-                }
 
-                // Scorecard
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Scorecard").font(.subheadline.bold()).foregroundStyle(.secondary)
+                    sectionHeader("SCORECARD")
                     ScorecardView(
                         holes: round.holes,
                         courseName: round.courseName,
                         teeName: round.teeName,
                         onHoleTap: onHoleTap
                     )
-                }
 
-                // AI Coach Analysis
-                if let analysis {
-                    RoundAnalysisView(analysis: analysis)
-                } else if loadingAnalysis {
-                    HStack {
-                        ProgressView().tint(.green)
-                        Text("AI Coach is analyzing your round...")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(.systemGray6).opacity(0.4))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-
-                // Action buttons
-                HStack(spacing: 12) {
-                    // Share scorecard
-                    Button {
-                        let card = ShareableScorecard(round: round, stats: stats)
-                        shareImage = card.renderImage()
-                        showShareSheet = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "square.and.arrow.up")
-                            Text("Share")
+                    if let analysis {
+                        RoundAnalysisView(analysis: analysis)
+                    } else if loadingAnalysis {
+                        HStack(spacing: 10) {
+                            ProgressView().tint(Theme.Colors.accent)
+                            Text("AI COACH IS ANALYZING...")
+                                .font(Theme.Font.caption(10))
+                                .foregroundStyle(Theme.Colors.textMuted)
+                                .tracking(1)
                         }
-                        .font(.subheadline.bold())
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color(.systemGray5))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                .fill(Theme.Colors.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                .strokeBorder(Theme.Colors.border, lineWidth: 1)
+                        )
                     }
 
-                    Button {
-                        onDone()
-                    } label: {
-                        Text("Done")
-                            .font(.headline)
-                            .foregroundStyle(.white)
+                    HStack(spacing: 10) {
+                        Button {
+                            let card = ShareableScorecard(round: round, stats: stats)
+                            shareImage = card.renderImage()
+                            showShareSheet = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 13, weight: .heavy))
+                                Text("SHARE")
+                                    .font(Theme.Font.title(13))
+                                    .tracking(1)
+                            }
+                            .foregroundStyle(Theme.Colors.textPrimary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(Color.green)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                    .fill(Theme.Colors.surface)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                    .strokeBorder(Theme.Colors.border, lineWidth: 1)
+                            )
+                        }
+
+                        Button { onDone() } label: {
+                            Text("DONE")
+                                .font(Theme.Font.title(14))
+                                .tracking(1.5)
+                                .foregroundStyle(Theme.Colors.backdrop)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(
+                                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                        .fill(Theme.Colors.accent)
+                                )
+                        }
                     }
+                    .padding(.bottom, 20)
                 }
+                .padding(16)
             }
-            .padding()
         }
         .sheet(isPresented: $showShareSheet) {
             if let image = shareImage {
@@ -186,6 +211,16 @@ struct RoundSummaryView: View {
             loadingAnalysis = true
             analysis = await analysisService.analyze(round: round)
             loadingAnalysis = false
+        }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        HStack {
+            Text(title)
+                .font(Theme.Font.caption(10))
+                .foregroundStyle(Theme.Colors.accent)
+                .tracking(1.5)
+            Spacer()
         }
     }
 }
@@ -208,22 +243,31 @@ struct StatCard: View {
     var sub: String?
 
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 3) {
             Text(label)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+                .font(Theme.Font.caption(9))
+                .foregroundStyle(Theme.Colors.textMuted)
+                .tracking(1)
             Text(value)
-                .font(.title3.bold())
+                .font(Theme.Font.display(20))
+                .foregroundStyle(Theme.Colors.textPrimary)
             if let sub {
                 Text(sub)
-                    .font(.system(size: 9))
-                    .foregroundStyle(.tertiary)
+                    .font(Theme.Font.caption(8))
+                    .foregroundStyle(Theme.Colors.textMuted)
+                    .tracking(0.5)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(Color(.systemGray6).opacity(0.6))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .fill(Theme.Colors.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .strokeBorder(Theme.Colors.border, lineWidth: 1)
+        )
     }
 }
 
@@ -235,11 +279,12 @@ struct ScoringPill: View {
     var body: some View {
         VStack(spacing: 2) {
             Text("\(count)")
-                .font(.headline.bold())
+                .font(Theme.Font.display(18))
                 .foregroundStyle(color)
             Text(label)
-                .font(.system(size: 8))
-                .foregroundStyle(.secondary)
+                .font(Theme.Font.caption(8))
+                .foregroundStyle(Theme.Colors.textMuted)
+                .tracking(0.5)
         }
         .frame(maxWidth: .infinity)
     }

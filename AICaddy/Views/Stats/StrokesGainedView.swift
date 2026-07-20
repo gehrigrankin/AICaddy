@@ -231,9 +231,9 @@ struct StrokesGainedView: View {
             VStack(spacing: 12) {
                 Image(systemName: "chart.bar.xaxis")
                     .font(.largeTitle)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Colors.textMuted)
                 Text("Play a round to see Strokes Gained analysis")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Colors.textMuted)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 40)
@@ -269,7 +269,7 @@ struct StrokesGainedView: View {
                             .foregroundStyle(sg.total >= 0 ? .green : .red)
                     }
                     .padding()
-                    .background(Color(.systemGray6))
+                    .background(Theme.Colors.surface)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
 
                     // Category bars
@@ -280,7 +280,7 @@ struct StrokesGainedView: View {
                     // Explanation
                     Text("Positive = better than \(selectedBenchmark.rawValue.lowercased()), Negative = worse")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.Colors.textMuted.opacity(0.6))
                         .frame(maxWidth: .infinity, alignment: .center)
 
                     // What Cost You
@@ -352,10 +352,10 @@ private struct SGBarRow: View {
 
             Text(category.detail)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Colors.textMuted)
         }
         .padding(12)
-        .background(Color(.systemGray6).opacity(0.5))
+        .background(Theme.Colors.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
@@ -401,7 +401,7 @@ struct WhatCostYouCard: View {
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 14)
-                .fill(Color(.systemGray6).opacity(0.6))
+                .fill(Theme.Colors.surface.opacity(0.6))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14)
                         .strokeBorder(Color.orange.opacity(0.3), lineWidth: 1)

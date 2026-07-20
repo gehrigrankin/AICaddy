@@ -42,18 +42,18 @@ struct WindCompass: View {
             ForEach(0..<8) { i in
                 Rectangle()
                     .fill(Theme.Colors.textMuted.opacity(0.35))
-                    .frame(width: 1, height: i % 2 == 0 ? 4 : 2)
-                    .offset(y: -19)
+                    .frame(width: 1, height: i % 2 == 0 ? 5 : 2)
+                    .offset(y: -21)
                     .rotationEffect(.degrees(Double(i) * 45))
             }
 
             // Speed + label stacked in the middle
             VStack(spacing: -1) {
                 Text(speedText)
-                    .font(Theme.Font.display(13))
+                    .font(Theme.Font.display(14))
                     .foregroundStyle(hasData ? Theme.Colors.textPrimary : Theme.Colors.textMuted)
                 Text(label)
-                    .font(Theme.Font.caption(7))
+                    .font(Theme.Font.caption(8))
                     .foregroundStyle(hasData ? Theme.Colors.accent : Theme.Colors.textMuted)
                     .tracking(0.8)
             }
@@ -61,13 +61,13 @@ struct WindCompass: View {
             // Arrow (hidden when no data)
             if hasData {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 9, weight: .black))
+                    .font(.system(size: 10, weight: .black))
                     .foregroundStyle(Theme.Colors.accent)
-                    .offset(y: -16)
+                    .offset(y: -18)
                     .rotationEffect(.degrees(arrowRotation))
             }
         }
-        .frame(width: 50, height: 50)
+        .frame(width: 54, height: 54)
         .themeShadow(Theme.Shadow.pill)
     }
 }

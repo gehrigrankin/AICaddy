@@ -9,31 +9,42 @@ struct StatsDeepDiveView: View {
     @State private var selectedTab = 0
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                // Tab picker
-                Picker("Stats", selection: $selectedTab) {
-                    Text("Overview").tag(0)
-                    Text("Strokes Gained").tag(1)
-                    Text("Par Splits").tag(2)
-                    Text("Clubs").tag(3)
-                    Text("Trends").tag(4)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
+        ZStack {
+            LinearGradient(
+                colors: [Theme.Colors.backdrop, Theme.Colors.surfaceDeep, Theme.Colors.backdrop],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 16) {
+                    Picker("Stats", selection: $selectedTab) {
+                        Text("OVERVIEW").tag(0)
+                        Text("SG").tag(1)
+                        Text("PARS").tag(2)
+                        Text("CLUBS").tag(3)
+                        Text("TRENDS").tag(4)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
 
-                switch selectedTab {
-                case 0: overviewTab
-                case 1: strokesGainedTab
-                case 2: parSplitsTab
-                case 3: clubsTab
-                case 4: trendsTab
-                default: EmptyView()
+                    switch selectedTab {
+                    case 0: overviewTab
+                    case 1: strokesGainedTab
+                    case 2: parSplitsTab
+                    case 3: clubsTab
+                    case 4: trendsTab
+                    default: EmptyView()
+                    }
                 }
+                .padding(.vertical)
             }
-            .padding(.vertical)
         }
-        .navigationTitle("Deep Stats")
+        .navigationTitle("DEEP STATS")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Theme.Colors.surface, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
     }
 
     // MARK: - Overview
@@ -57,7 +68,7 @@ struct StatsDeepDiveView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(period.label)
                             .font(.subheadline.bold())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.Colors.textMuted)
 
                         LazyVGrid(columns: [.init(), .init(), .init()], spacing: 6) {
                             StatCard(label: "Avg Score", value: String(format: "%.0f", period.avgScore))
@@ -79,7 +90,7 @@ struct StatsDeepDiveView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Last Round Streaks")
                             .font(.subheadline.bold())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.Colors.textMuted)
 
                         ForEach(streaks.hotStreaks.prefix(2), id: \.startHole) { streak in
                             HStack {
@@ -164,7 +175,7 @@ struct StatsDeepDiveView: View {
             // Score trend
             if allTime.scoreTrend.count >= 2 {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Score Trend").font(.subheadline.bold()).foregroundStyle(.secondary)
+                    Text("Score Trend").font(.subheadline.bold()).foregroundStyle(Theme.Colors.textMuted)
                     TrendBars(values: allTime.scoreTrend.reversed(), color: .green)
                 }
             }
@@ -172,7 +183,7 @@ struct StatsDeepDiveView: View {
             // Handicap trend
             if allTime.handicapTrend.count >= 2 {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Handicap Trend").font(.subheadline.bold()).foregroundStyle(.secondary)
+                    Text("Handicap Trend").font(.subheadline.bold()).foregroundStyle(Theme.Colors.textMuted)
                     TrendBars(values: allTime.handicapTrend.map { Int($0) }, color: .cyan)
                 }
             }
@@ -196,7 +207,7 @@ private struct ParSplitCard: View {
                     Spacer()
                     Text("\(stats.count) holes played")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textMuted)
                 }
 
                 HStack {
@@ -225,10 +236,10 @@ private struct ParSplitCard: View {
 
                 Text("Total vs par: \(stats.totalToPar >= 0 ? "+" : "")\(stats.totalToPar)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Colors.textMuted)
             }
             .padding()
-            .background(Color(.systemGray6).opacity(0.5))
+            .background(Theme.Colors.surface.opacity(0.5))
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
     }
@@ -252,11 +263,11 @@ private struct ClubDistanceRow: View {
 
             HStack(spacing: 12) {
                 Text("Min: \(distances.min() ?? 0)y")
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.caption2).foregroundStyle(Theme.Colors.textMuted)
                 Text("Max: \(distances.max() ?? 0)y")
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.caption2).foregroundStyle(Theme.Colors.textMuted)
                 Text("\(distances.count) shots")
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.caption2).foregroundStyle(Theme.Colors.textMuted)
             }
 
             if let disp = dispersion {
@@ -266,7 +277,7 @@ private struct ClubDistanceRow: View {
             }
         }
         .padding(10)
-        .background(Color(.systemGray6).opacity(0.5))
+        .background(Theme.Colors.surface.opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
@@ -277,14 +288,14 @@ private struct SGCard: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(label).font(.caption).foregroundStyle(Theme.Colors.textMuted)
             Text(String(format: "%+.1f", value))
                 .font(.title3.bold())
                 .foregroundStyle(value >= 0 ? .green : .red)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
-        .background(Color(.systemGray6))
+        .background(Theme.Colors.surface)
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
@@ -327,7 +338,7 @@ private struct TrendBars: View {
                 VStack(spacing: 1) {
                     Text("\(val)")
                         .font(.system(size: 7))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textMuted)
                     RoundedRectangle(cornerRadius: 2)
                         .fill(color)
                         .frame(height: height)

@@ -10,17 +10,28 @@ struct RoundComparisonView: View {
     private var stats2: RoundStats { StatsCalculator.calculate(holes: holes2) }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                headerSection
-                holeByHoleSection
-                summaryStatsSection
-                scoringDistributionSection
+        ZStack {
+            LinearGradient(
+                colors: [Theme.Colors.backdrop, Theme.Colors.surfaceDeep, Theme.Colors.backdrop],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 20) {
+                    headerSection
+                    holeByHoleSection
+                    summaryStatsSection
+                    scoringDistributionSection
+                }
+                .padding()
             }
-            .padding()
         }
-        .navigationTitle("Compare Rounds")
+        .navigationTitle("COMPARE ROUNDS")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Theme.Colors.surface, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
     }
 
     // MARK: - Header
@@ -30,7 +41,7 @@ struct RoundComparisonView: View {
             roundCard(courseName: round1.courseName, date: round1.date, score: stats1.totalStrokes, scoreToPar: stats1.scoreToPar)
             Text("VS")
                 .font(.caption.bold())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Colors.textMuted)
                 .padding(.horizontal, 8)
             roundCard(courseName: round2.courseName, date: round2.date, score: stats2.totalStrokes, scoreToPar: stats2.scoreToPar)
         }
@@ -44,7 +55,7 @@ struct RoundComparisonView: View {
                 .multilineTextAlignment(.center)
             Text(date.formatted(date: .abbreviated, time: .omitted))
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Colors.textMuted)
             Text("\(score)")
                 .font(.title.bold())
             ScoreText(scoreToPar: scoreToPar)
@@ -52,7 +63,7 @@ struct RoundComparisonView: View {
         }
         .frame(maxWidth: .infinity)
         .padding()
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Theme.Colors.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
@@ -72,7 +83,7 @@ struct RoundComparisonView: View {
                     .frame(maxWidth: .infinity)
             }
             .font(.caption.bold())
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Theme.Colors.textMuted)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
@@ -103,7 +114,7 @@ struct RoundComparisonView: View {
             Divider()
             totalRow
         }
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Theme.Colors.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
@@ -115,7 +126,7 @@ struct RoundComparisonView: View {
             Text("\(par)")
                 .frame(width: 36, alignment: .center)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Colors.textMuted)
             scoreCell(score: score1, par: par, otherScore: score2)
                 .frame(maxWidth: .infinity)
             scoreCell(score: score2, par: par, otherScore: score1)
@@ -134,7 +145,7 @@ struct RoundComparisonView: View {
             } else {
                 Text("-")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Colors.textMuted)
             }
         }
     }
@@ -165,7 +176,7 @@ struct RoundComparisonView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(Color(.systemGray5).opacity(0.5))
+        .background(Theme.Colors.surfaceElevated)
     }
 
     private var totalRow: some View {
@@ -186,7 +197,7 @@ struct RoundComparisonView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color(.systemGray5).opacity(0.5))
+        .background(Theme.Colors.surfaceElevated)
     }
 
     // MARK: - Summary Stats
@@ -204,7 +215,7 @@ struct RoundComparisonView: View {
             statComparisonRow(label: "Scrambling %", val1: String(format: "%.0f%%", stats1.scramblingPct), val2: String(format: "%.0f%%", stats2.scramblingPct), lowerIsBetter: false, num1: stats1.scramblingPct, num2: stats2.scramblingPct)
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Theme.Colors.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
@@ -217,7 +228,7 @@ struct RoundComparisonView: View {
             Spacer()
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Colors.textMuted)
             Spacer()
             Text(val2)
                 .font(.subheadline.bold())
@@ -248,7 +259,7 @@ struct RoundComparisonView: View {
             distributionRow(label: "Double+", count1: stats1.doubleBogeys + stats1.triplePlus, count2: stats2.doubleBogeys + stats2.triplePlus)
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Theme.Colors.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
@@ -260,7 +271,7 @@ struct RoundComparisonView: View {
             distributionBar(count: count1, maxCount: 18, alignment: .trailing)
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Colors.textMuted)
                 .frame(width: 60)
             distributionBar(count: count2, maxCount: 18, alignment: .leading)
             Text("\(count2)")
@@ -275,13 +286,13 @@ struct RoundComparisonView: View {
             HStack {
                 if alignment == .leading {
                     RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.green.opacity(0.7))
+                        .fill(Theme.Colors.accent.opacity(0.7))
                         .frame(width: max(width, 0), height: 14)
                     Spacer(minLength: 0)
                 } else {
                     Spacer(minLength: 0)
                     RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.green.opacity(0.7))
+                        .fill(Theme.Colors.accent.opacity(0.7))
                         .frame(width: max(width, 0), height: 14)
                 }
             }

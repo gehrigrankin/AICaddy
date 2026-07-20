@@ -42,17 +42,26 @@ struct StatsDashboardView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // MARK: At a Glance
-                atAGlanceSection
-
-                // MARK: Navigation Cards
-                navigationCardsSection
+        ZStack {
+            LinearGradient(
+                colors: [Theme.Colors.backdrop, Theme.Colors.surfaceDeep, Theme.Colors.backdrop],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 20) {
+                    atAGlanceSection
+                    navigationCardsSection
+                }
+                .padding()
             }
-            .padding()
         }
-        .navigationTitle("Stats")
+        .navigationTitle("STATS")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Theme.Colors.surface, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
     }
 
     // MARK: - At a Glance
@@ -62,7 +71,7 @@ struct StatsDashboardView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("AT A GLANCE")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Colors.textMuted)
 
             LazyVGrid(columns: [.init(), .init()], spacing: 10) {
                 glanceCard(
@@ -93,19 +102,19 @@ struct StatsDashboardView: View {
         HStack(spacing: 10) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundStyle(.green)
+                .foregroundStyle(Theme.Colors.accent)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Colors.textMuted)
                 Text(value)
                     .font(.title2.bold())
             }
             Spacer()
         }
         .padding(12)
-        .background(Color(.systemGray6).opacity(0.6))
+        .background(Theme.Colors.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
@@ -165,14 +174,14 @@ struct StatsDashboardView: View {
                 HStack {
                     Text("All Stats (Deep Dive)")
                         .font(.subheadline.bold())
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Theme.Colors.accent)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textMuted)
                 }
                 .padding()
-                .background(Color.green.opacity(0.1))
+                .background(Theme.Colors.accentSoft)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
@@ -190,10 +199,10 @@ struct StatsDashboardView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.headline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Text(preview)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Colors.textMuted)
                     .lineLimit(1)
             }
 
@@ -201,10 +210,10 @@ struct StatsDashboardView: View {
 
             Image(systemName: "chevron.right")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Theme.Colors.textMuted.opacity(0.6))
         }
         .padding(14)
-        .background(Color(.systemGray6).opacity(0.6))
+        .background(Theme.Colors.surface)
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
@@ -273,7 +282,7 @@ private struct ClubDistancesDetailView: View {
                 if clubDists.isEmpty {
                     Text("No club data recorded yet.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textMuted)
                         .padding(.top, 40)
                 } else {
                     ForEach(
@@ -319,7 +328,7 @@ private struct TrendsDetailView: View {
                 if allTime.scoreTrend.count < 2 && allTime.handicapTrend.count < 2 {
                     Text("Play more rounds to see trends.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textMuted)
                         .padding(.top, 40)
                 }
             }
@@ -346,7 +355,7 @@ private struct ParPerformanceDetailView: View {
                 if analysis.par3.count == 0 && analysis.par4.count == 0 && analysis.par5.count == 0 {
                     Text("No par performance data yet.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textMuted)
                         .padding(.top, 20)
                 }
             }
@@ -372,16 +381,16 @@ private struct ClubDistanceCard: View {
                 Spacer()
                 Text("avg \(distances.reduce(0, +) / distances.count)y")
                     .font(.subheadline.bold())
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Theme.Colors.accent)
             }
 
             HStack(spacing: 12) {
                 Text("Min: \(distances.min() ?? 0)y")
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.caption2).foregroundStyle(Theme.Colors.textMuted)
                 Text("Max: \(distances.max() ?? 0)y")
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.caption2).foregroundStyle(Theme.Colors.textMuted)
                 Text("\(distances.count) shots")
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.caption2).foregroundStyle(Theme.Colors.textMuted)
             }
 
             if let disp = dispersion {
@@ -409,7 +418,7 @@ private struct DashboardParSplitCard: View {
                     Spacer()
                     Text("\(stats.count) holes played")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textMuted)
                 }
 
                 HStack {
@@ -422,11 +431,11 @@ private struct DashboardParSplitCard: View {
 
                 Text("Birdies: \(stats.birdieOrBetter) | Pars: \(stats.pars) | Bogeys: \(stats.bogeys) | Dbl+: \(stats.doublePlus)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Colors.textMuted)
 
                 Text("Total vs par: \(stats.totalToPar >= 0 ? "+" : "")\(stats.totalToPar)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Colors.textMuted)
             }
             .padding()
             .background(Color(.systemGray6).opacity(0.5))
@@ -450,7 +459,7 @@ private struct DashboardTrendBars: View {
                 VStack(spacing: 1) {
                     Text("\(val)")
                         .font(.system(size: 8))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textMuted)
                     RoundedRectangle(cornerRadius: 2)
                         .fill(color)
                         .frame(height: height)

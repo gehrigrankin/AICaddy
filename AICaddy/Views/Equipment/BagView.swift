@@ -29,18 +29,27 @@ struct BagView: View {
     }
 
     var body: some View {
-        ScrollView {
+        ZStack {
+            LinearGradient(
+                colors: [Theme.Colors.backdrop, Theme.Colors.surfaceDeep, Theme.Colors.backdrop],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
             VStack(spacing: 16) {
                 // Header card
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("MY BAG")
-                            .font(.system(size: 10, weight: .heavy))
-                            .foregroundStyle(.green.opacity(0.7))
+                            .font(Theme.Font.display(20))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .tracking(2)
+                        Text("\(bag?.clubs.count ?? 0) OF 14 CLUBS")
+                            .font(Theme.Font.caption(10))
+                            .foregroundStyle(Theme.Colors.accent)
                             .tracking(1)
-                        Text("\(bag?.clubs.count ?? 0) of 14 clubs")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.secondary)
                     }
                     Spacer()
                     if bag == nil {
@@ -48,150 +57,170 @@ struct BagView: View {
                             let newBag = GolfBag()
                             modelContext.insert(newBag)
                         } label: {
-                            Text("Set Up Bag")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(Color.green)
-                                .clipShape(Capsule())
+                            Text("SET UP BAG")
+                                .font(Theme.Font.caption(11))
+                                .tracking(1)
+                                .foregroundStyle(Theme.Colors.backdrop)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 9)
+                                .background(Capsule().fill(Theme.Colors.accent))
                         }
                     } else if (bag?.clubs.count ?? 14) < 14 {
                         Button { showAddClub = true } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "plus")
-                                    .font(.system(size: 11, weight: .bold))
-                                Text("Add Club")
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(.system(size: 11, weight: .heavy))
+                                Text("ADD CLUB")
+                                    .font(Theme.Font.caption(11))
+                                    .tracking(1)
                             }
-                            .foregroundStyle(.green)
+                            .foregroundStyle(Theme.Colors.accent)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
-                            .background(.green.opacity(0.1))
-                            .clipShape(Capsule())
+                            .background(Capsule().fill(Theme.Colors.accentSoft))
+                            .overlay(Capsule().strokeBorder(Theme.Colors.accent.opacity(0.4), lineWidth: 1))
                         }
                     }
                 }
                 .padding(14)
-                .background(Color(.systemGray6).opacity(0.6))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                        .fill(Theme.Colors.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                        .strokeBorder(Theme.Colors.border, lineWidth: 1)
+                )
 
                 // Clubs by category
                 if let bag {
                     ForEach(clubsByCategory, id: \.0) { category, clubs in
                         VStack(alignment: .leading, spacing: 8) {
                             Text(category.uppercased())
-                                .font(.system(size: 10, weight: .heavy))
-                                .foregroundStyle(.secondary)
-                                .tracking(0.5)
+                                .font(Theme.Font.caption(10))
+                                .foregroundStyle(Theme.Colors.accent)
+                                .tracking(1.5)
                                 .padding(.leading, 4)
 
                             VStack(spacing: 1) {
                                 ForEach(clubs) { club in
                                     Button { editingClub = club } label: {
                                         HStack(spacing: 12) {
-                                            // Club icon
                                             Image(systemName: clubIcon(for: club.club))
-                                                .font(.system(size: 14))
-                                                .foregroundStyle(.green)
-                                                .frame(width: 32, height: 32)
-                                                .background(.green.opacity(0.1))
-                                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                .font(.system(size: 14, weight: .heavy))
+                                                .foregroundStyle(Theme.Colors.accent)
+                                                .frame(width: 36, height: 36)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                        .fill(Theme.Colors.accentSoft)
+                                                )
 
-                                            // Name + brand
                                             VStack(alignment: .leading, spacing: 2) {
-                                                Text(club.club.displayName)
-                                                    .font(.system(size: 14, weight: .semibold))
-                                                    .foregroundStyle(.primary)
+                                                Text(club.club.displayName.uppercased())
+                                                    .font(Theme.Font.title(14))
+                                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                                    .tracking(0.5)
                                                 if let brand = club.brand, let model = club.model {
-                                                    Text("\(brand) \(model)")
-                                                        .font(.system(size: 11))
-                                                        .foregroundStyle(.secondary)
+                                                    Text("\(brand) \(model)".uppercased())
+                                                        .font(Theme.Font.caption(10))
+                                                        .foregroundStyle(Theme.Colors.textMuted)
+                                                        .tracking(0.5)
                                                 } else if let brand = club.brand {
-                                                    Text(brand)
-                                                        .font(.system(size: 11))
-                                                        .foregroundStyle(.secondary)
+                                                    Text(brand.uppercased())
+                                                        .font(Theme.Font.caption(10))
+                                                        .foregroundStyle(Theme.Colors.textMuted)
+                                                        .tracking(0.5)
                                                 }
                                             }
 
                                             Spacer()
 
-                                            // Yardage
                                             if let yardage = club.effectiveYardage {
-                                                VStack(alignment: .trailing, spacing: 1) {
+                                                VStack(alignment: .trailing, spacing: 0) {
                                                     Text("\(yardage)")
-                                                        .font(.system(size: 18, weight: .heavy, design: .rounded))
-                                                        .foregroundStyle(.white)
+                                                        .font(Theme.Font.display(20))
+                                                        .foregroundStyle(Theme.Colors.textPrimary)
                                                     Text("YDS")
-                                                        .font(.system(size: 8, weight: .bold))
-                                                        .foregroundStyle(.secondary)
+                                                        .font(Theme.Font.caption(8))
+                                                        .foregroundStyle(Theme.Colors.textMuted)
+                                                        .tracking(0.8)
                                                 }
                                             } else {
                                                 Text("--")
-                                                    .font(.system(size: 18, weight: .heavy, design: .rounded))
-                                                    .foregroundStyle(.tertiary)
+                                                    .font(Theme.Font.display(20))
+                                                    .foregroundStyle(Theme.Colors.textMuted)
                                             }
 
                                             Image(systemName: "chevron.right")
-                                                .font(.system(size: 10, weight: .semibold))
-                                                .foregroundStyle(.tertiary)
+                                                .font(.system(size: 10, weight: .heavy))
+                                                .foregroundStyle(Theme.Colors.textMuted)
                                         }
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 10)
                                     }
                                 }
                             }
-                            .background(Color(.systemGray6).opacity(0.5))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                    .fill(Theme.Colors.surface)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                    .strokeBorder(Theme.Colors.border, lineWidth: 1)
+                            )
                         }
                     }
 
-                    // Swing thought preview
                     let thoughts = bag.clubs.filter { $0.swingThought != nil && !($0.swingThought?.isEmpty ?? true) }
                     if !thoughts.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("SWING THOUGHTS")
-                                .font(.system(size: 10, weight: .heavy))
-                                .foregroundStyle(.secondary)
-                                .tracking(0.5)
+                                .font(Theme.Font.caption(10))
+                                .foregroundStyle(Theme.Colors.accent)
+                                .tracking(1.5)
                                 .padding(.leading, 4)
 
-                            VStack(spacing: 6) {
+                            VStack(spacing: 1) {
                                 ForEach(thoughts) { club in
                                     HStack(spacing: 10) {
-                                        Text(club.club.displayName)
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(.green)
-                                            .frame(width: 60, alignment: .leading)
+                                        Text(club.club.displayName.uppercased())
+                                            .font(Theme.Font.label(11))
+                                            .foregroundStyle(Theme.Colors.accent)
+                                            .tracking(0.5)
+                                            .frame(width: 64, alignment: .leading)
                                         Text(club.swingThought ?? "")
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(.primary)
-                                            .italic()
+                                            .font(.system(size: 12, weight: .medium).italic())
+                                            .foregroundStyle(Theme.Colors.textSecondary)
                                         Spacer()
                                     }
                                     .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
+                                    .padding(.vertical, 9)
                                 }
                             }
-                            .background(Color(.systemGray6).opacity(0.5))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                    .fill(Theme.Colors.surface)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                    .strokeBorder(Theme.Colors.border, lineWidth: 1)
+                            )
                         }
                     }
                 }
 
-                // Equipment log
                 if !equipmentLogs.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("EQUIPMENT LOG")
-                                .font(.system(size: 10, weight: .heavy))
-                                .foregroundStyle(.secondary)
-                                .tracking(0.5)
+                                .font(Theme.Font.caption(10))
+                                .foregroundStyle(Theme.Colors.accent)
+                                .tracking(1.5)
                             Spacer()
                             Button { showAddEquipment = true } label: {
                                 Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 16))
-                                    .foregroundStyle(.green)
+                                    .font(.system(size: 16, weight: .heavy))
+                                    .foregroundStyle(Theme.Colors.accent)
                             }
                         }
                         .padding(.horizontal, 4)
@@ -199,56 +228,79 @@ struct BagView: View {
                         VStack(spacing: 1) {
                             ForEach(equipmentLogs.sorted(by: { $0.dateStarted > $1.dateStarted }).prefix(5), id: \.id) { log in
                                 HStack(spacing: 10) {
-                                    Text(log.itemType.capitalized)
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(.green)
+                                    Text(log.itemType.uppercased())
+                                        .font(Theme.Font.caption(10))
+                                        .foregroundStyle(Theme.Colors.accent)
+                                        .tracking(0.8)
                                         .padding(.horizontal, 6)
                                         .padding(.vertical, 2)
-                                        .background(.green.opacity(0.1))
-                                        .clipShape(Capsule())
+                                        .background(Capsule().fill(Theme.Colors.accentSoft))
                                     Text(log.itemName)
-                                        .font(.system(size: 13, weight: .medium))
+                                        .font(Theme.Font.label(13))
+                                        .foregroundStyle(Theme.Colors.textPrimary)
                                     Spacer()
-                                    Text(log.dateStarted.formatted(date: .abbreviated, time: .omitted))
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.tertiary)
+                                    Text(log.dateStarted.formatted(date: .abbreviated, time: .omitted).uppercased())
+                                        .font(Theme.Font.caption(9))
+                                        .foregroundStyle(Theme.Colors.textMuted)
+                                        .tracking(0.5)
                                 }
                                 .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
+                                .padding(.vertical, 9)
                             }
                         }
-                        .background(Color(.systemGray6).opacity(0.5))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .background(
+                            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                .fill(Theme.Colors.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                .strokeBorder(Theme.Colors.border, lineWidth: 1)
+                        )
                     }
                 } else {
                     Button { showAddEquipment = true } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "wrench.and.screwdriver")
-                                .font(.system(size: 14))
-                            Text("Log Equipment Change")
-                                .font(.system(size: 13, weight: .medium))
+                                .font(.system(size: 13, weight: .heavy))
+                            Text("LOG EQUIPMENT CHANGE")
+                                .font(Theme.Font.caption(11))
+                                .tracking(1)
                         }
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color(.systemGray6).opacity(0.4))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .background(
+                            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                .fill(Theme.Colors.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                                .strokeBorder(Theme.Colors.border, lineWidth: 1)
+                        )
                     }
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 100) // clear tab bar
+            .padding(.bottom, 40)
+            }
         }
-        .navigationTitle("My Bag")
+        .navigationTitle("MY BAG")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Theme.Colors.surface, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .sheet(item: $editingClub) { club in
             EditClubSheet(bag: bag!, club: club, modelContext: modelContext)
+                .preferredColorScheme(.dark)
         }
         .sheet(isPresented: $showAddEquipment) {
             AddEquipmentSheet(modelContext: modelContext)
+                .preferredColorScheme(.dark)
         }
         .sheet(isPresented: $showAddClub) {
             if let bag {
                 AddClubSheet(bag: bag)
+                    .preferredColorScheme(.dark)
             }
         }
     }

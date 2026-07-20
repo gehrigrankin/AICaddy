@@ -119,9 +119,11 @@ struct YearlyWrappedView: View {
             }
             .padding()
         }
-        .background(Color.black.ignoresSafeArea())
-        .navigationTitle("\(String(year)) Wrapped")
+        .background(Theme.Colors.backdrop.ignoresSafeArea())
+        .navigationTitle("\(String(year)) WRAPPED")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Theme.Colors.surface, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
     }
 
@@ -131,10 +133,10 @@ struct YearlyWrappedView: View {
         VStack(spacing: 8) {
             Text("Your \(String(year))")
                 .font(.title3)
-                .foregroundStyle(.gray)
+                .foregroundStyle(Theme.Colors.textMuted)
             Text("Golf Wrapped")
                 .font(.system(size: 36, weight: .black))
-                .foregroundStyle(.green)
+                .foregroundStyle(Theme.Colors.accent)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
@@ -145,7 +147,7 @@ struct YearlyWrappedView: View {
             VStack(spacing: 20) {
                 Text("THE OVERVIEW")
                     .font(.caption.bold())
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Theme.Colors.accent)
                     .tracking(2)
 
                 HStack(spacing: 24) {
@@ -162,25 +164,25 @@ struct YearlyWrappedView: View {
             VStack(spacing: 12) {
                 Text("BEST ROUND")
                     .font(.caption.bold())
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Theme.Colors.accent)
                     .tracking(2)
 
                 if let (round, stats) = bestRound {
                     Text("\(stats.totalStrokes)")
                         .font(.system(size: 64, weight: .black))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     Text(round.courseName)
                         .font(.title3.bold())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     Text(round.date.formatted(date: .abbreviated, time: .omitted))
                         .font(.subheadline)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(Theme.Colors.textMuted)
                     ScoreText(scoreToPar: stats.scoreToPar)
                         .font(.headline.bold())
                 } else {
                     Text("-")
                         .font(.title)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(Theme.Colors.textMuted)
                 }
             }
         }
@@ -191,23 +193,23 @@ struct YearlyWrappedView: View {
             VStack(spacing: 12) {
                 Text("TOUGHEST DAY")
                     .font(.caption.bold())
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Theme.Colors.accent)
                     .tracking(2)
 
                 if let (round, stats) = worstRound {
                     Text("\(stats.totalStrokes)")
                         .font(.system(size: 48, weight: .black))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(Theme.Colors.textPrimary.opacity(0.7))
                     Text(round.courseName)
                         .font(.subheadline.bold())
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(Theme.Colors.textPrimary.opacity(0.7))
                     Text(round.date.formatted(date: .abbreviated, time: .omitted))
                         .font(.caption)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(Theme.Colors.textMuted)
                 } else {
                     Text("-")
                         .font(.title)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(Theme.Colors.textMuted)
                 }
             }
         }
@@ -218,21 +220,21 @@ struct YearlyWrappedView: View {
             VStack(spacing: 12) {
                 Text("HOME COURSE")
                     .font(.caption.bold())
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Theme.Colors.accent)
                     .tracking(2)
 
                 if let (name, count) = mostPlayedCourse {
                     Text(name)
                         .font(.title2.bold())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.Colors.textPrimary)
                         .multilineTextAlignment(.center)
                     Text("\(count) \(count == 1 ? "round" : "rounds")")
                         .font(.headline)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(Theme.Colors.textMuted)
                 } else {
                     Text("-")
                         .font(.title)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(Theme.Colors.textMuted)
                 }
             }
         }
@@ -243,20 +245,20 @@ struct YearlyWrappedView: View {
             VStack(spacing: 12) {
                 Text("GO-TO CLUB")
                     .font(.caption.bold())
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Theme.Colors.accent)
                     .tracking(2)
 
                 if let (club, count) = mostUsedClub {
                     Text(club.displayName)
                         .font(.system(size: 36, weight: .black))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     Text("\(count) shots")
                         .font(.headline)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(Theme.Colors.textMuted)
                 } else {
                     Text("-")
                         .font(.title)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(Theme.Colors.textMuted)
                 }
             }
         }
@@ -267,20 +269,20 @@ struct YearlyWrappedView: View {
             VStack(spacing: 12) {
                 Text("MONEY HOLE")
                     .font(.caption.bold())
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Theme.Colors.accent)
                     .tracking(2)
 
                 if let (holeNum, description) = bestHole {
                     Text("Hole \(holeNum)")
                         .font(.system(size: 36, weight: .black))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     Text(description)
                         .font(.headline)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(Theme.Colors.textMuted)
                 } else {
                     Text("No birdies yet")
                         .font(.subheadline)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(Theme.Colors.textMuted)
                 }
             }
         }
@@ -291,7 +293,7 @@ struct YearlyWrappedView: View {
             VStack(spacing: 12) {
                 Text("IMPROVEMENT")
                     .font(.caption.bold())
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Theme.Colors.accent)
                     .tracking(2)
 
                 if let improvement = scoringImprovement {
@@ -301,14 +303,14 @@ struct YearlyWrappedView: View {
                         .foregroundStyle(improved ? .green : .red)
                     Text(improved ? "strokes better" : "strokes higher")
                         .font(.subheadline)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(Theme.Colors.textMuted)
                     Text("Last 5 rounds vs first 5")
                         .font(.caption)
-                        .foregroundStyle(.gray.opacity(0.7))
+                        .foregroundStyle(Theme.Colors.textMuted.opacity(0.7))
                 } else {
                     Text("Play 10+ rounds to unlock")
                         .font(.subheadline)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(Theme.Colors.textMuted)
                 }
             }
         }
@@ -319,7 +321,7 @@ struct YearlyWrappedView: View {
             VStack(spacing: 16) {
                 Text("BY THE NUMBERS")
                     .font(.caption.bold())
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Theme.Colors.accent)
                     .tracking(2)
 
                 VStack(spacing: 12) {
@@ -341,12 +343,12 @@ struct YearlyWrappedView: View {
             .padding(.vertical, 32)
             .padding(.horizontal, 24)
             .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color(.systemGray6).opacity(0.15))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .strokeBorder(Color.green.opacity(0.15), lineWidth: 1)
-                    )
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Theme.Colors.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(Theme.Colors.accent.opacity(0.25), lineWidth: 1)
             )
     }
 
@@ -354,10 +356,10 @@ struct YearlyWrappedView: View {
         VStack(spacing: 4) {
             Text(value)
                 .font(.system(size: 32, weight: .black))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.Colors.textPrimary)
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.gray)
+                .foregroundStyle(Theme.Colors.textMuted)
         }
     }
 
@@ -365,11 +367,11 @@ struct YearlyWrappedView: View {
         HStack {
             Text(value)
                 .font(.title3.bold())
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.Colors.textPrimary)
                 .frame(width: 60, alignment: .trailing)
             Text(label)
                 .font(.subheadline)
-                .foregroundStyle(.gray)
+                .foregroundStyle(Theme.Colors.textMuted)
             Spacer()
         }
     }
